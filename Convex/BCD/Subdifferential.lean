@@ -19,3 +19,6 @@ def f_subdifferential (f : E → ℝ) (x : E) : Set E :=
 def subdifferential (f : E → ℝ) (x : E) : Set E :=
   {v₀ : E | ∃ u : ℕ → E, Tendsto u atTop (𝓝 x) ∧ Tendsto (fun n ↦ f (u n)) atTop (𝓝 (f x))
     ∧ (∃ v : ℕ → E, ∀ n, v n ∈ f_subdifferential f (u n) ∧ Tendsto v atTop (𝓝 v₀))}
+
+def active_domain (f : E → ℝ) : Set E :=
+  {x | subdifferential f x ≠ ∅}
