@@ -26,3 +26,7 @@ def subdifferential (f : E → ℝ) (x : E) : Set E :=
 /- the domain of the function is the points whose subifferential are non empty -/
 def active_domain (f : E → ℝ) : Set E :=
   {x | subdifferential f x ≠ ∅}
+
+/- the critial point of a function -/
+def critial_point (f : E → ℝ) : Set E :=
+  {x | 0 ∈ subdifferential f x}
