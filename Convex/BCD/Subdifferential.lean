@@ -1,6 +1,7 @@
 import Mathlib.Order.LiminfLimsup
 import Convex.Analysis.Calculation
 import Mathlib.Topology.Defs.Filter
+import Convex.Function.Proximal
 
 noncomputable section
 
@@ -30,3 +31,40 @@ def active_domain (f : E → ℝ) : Set E :=
 /- the critial point of a function -/
 def critial_point (f : E → ℝ) : Set E :=
   {x | 0 ∈ subdifferential f x}
+
+/-first order optimality condition for unconstrained optimization problem-/
+theorem first_order_optimality_condition (f : E → ℝ) (x₀ : E) (hf: LowerSemicontinuous f)
+    (hx: IsLocalMin f x₀) : 0 ∈ subdifferential f x₀ := by
+  sorry
+
+/-equivalent condition for non-convex proximal operator-/
+theorem rela_proximal_operator_partial (f : E → ℝ )(x : E)(u : E)(hf: LowerSemicontinuous f)
+(lbf: ∃ b : ℝ, ∀ x : E, b ≤ f x) : u ∈ prox_set f x → (x-u) ∈ subdifferential f u:=by
+  sorry
+
+/- the limit subdifferential is the subset of the Frechet subdifferential-/
+theorem subdifferential_subset (f : E → ℝ )(x : E)(hf: LowerSemicontinuous f):
+f_subdifferential f x ⊆  subdifferential f x:=by
+  sorry
+
+/-the Frechet subdifferential is a closed set-/
+theorem f_subdifferential_closed (f : E → ℝ )(x : E): IsClosed (f_subdifferential f x) := by
+  sorry
+
+/-the Frechet subdifferential is a convex set-/
+theorem f_subdifferential_convex (f : E → ℝ )(x : E): Convex ℝ  (f_subdifferential f x):=by
+  sorry
+
+--Convex ℝ  (f_subdifferential f x); ℝ ?
+/-the limit subdifferential is a convex set-/
+theorem subdifferential_closed (f : E → ℝ )(x : E): IsClosed (subdifferential f x):=by
+  sorry
+
+/-If f is convex , then Fenchel-subdifferential equals subdifferential equals subgradient-/
+theorem convex_f_f_subdifferential_eq_subdifferential (f : E → ℝ) (x : E) (hf: LowerSemicontinuous f)
+    (hconv : ConvexOn ℝ univ f): f_subdifferential f x = subdifferential f x := by
+  sorry
+
+theorem convex_f_f_subdifferantial_eq_subgradient (f : E → ℝ) (x : E) (hf: LowerSemicontinuous f)
+    (hconv : ConvexOn ℝ univ f) : (f_subdifferential f x) = (SubderivAt f x) := by
+  sorry
