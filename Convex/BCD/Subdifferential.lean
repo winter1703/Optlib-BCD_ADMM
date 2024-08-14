@@ -10,7 +10,7 @@ open Filter BigOperators Set Topology
 
 variable {E : Type*}
 variable [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
-variable {f : E → ℝ} {x u v : E}
+variable {f g : E → ℝ} {x y u v : E} {c : ℝ}
 
 /- the general differential function used in the definition -/
 def differential_fun (x : E) (f : E → ℝ) (u : E) :=
@@ -170,6 +170,16 @@ theorem f_subdiff_neg_f_subdiff_unique (hu : u ∈ f_subdifferential f x)
   rw [div_mul_cancel₀ _ hne, abs_of_nonneg (by positivity), mul_comm] at hd
   exact le_of_mul_le_mul_right hd (by positivity)
 
+theorem f_subdiff_smul (h : u ∈ f_subdifferential (c • f) x) (cpos : 0 < c) :
+    c⁻¹ • u ∈ f_subdifferential f x := by
+  rw [has_f_subdiff_iff] at *
+  intro ε εpos
+  filter_upwards [h _ (mul_pos cpos εpos)] with y hy
+  rw [real_inner_smul_left]
+  simp only [Pi.smul_apply, smul_eq_mul, neg_mul, neg_le_sub_iff_le_add] at hy
+  apply (mul_le_mul_left cpos).mp
+  field_simp
+  linarith
 
 /- the limit subdifferential is the subset of the Frechet subdifferential-/
 theorem subdifferential_subset (f : E → ℝ) (x : E): f_subdifferential f x ⊆ subdifferential f x :=
@@ -247,10 +257,6 @@ constructor
   repeat' assumption
   simp only [tendsto_const_nhds_iff]
 
-section Lemma
-
-variable {f g : E → ℝ} {u v x : E}
-
 theorem f_subdiff_add (hf : u ∈ f_subdifferential f x) (hg : v ∈ f_subdifferential g x)
     : u + v ∈ f_subdifferential (f + g) x := by
   rw [has_f_subdiff_iff] at *
@@ -265,11 +271,21 @@ theorem f_subdiff_add_smooth (h : u ∈ f_subdifferential f x)
     (hg : HasGradientAt g v x) : u + v ∈ f_subdifferential (f + g) x := by
   exact f_subdiff_add h (HasGradientAt_iff_f_subdiff.mp hg).1
 
-lemma f_subdiff_prox (h : prox_prop f u x) : u - x ∈ f_subdifferential f x := by
-  unfold prox_prop at h
-  sorry
+lemma f_subdiff_prox (h : prox_prop f y x) : y - x ∈ f_subdifferential f x := by
+  have : IsLocalMin (fun u ↦ f u + ‖u - y‖ ^ 2 / 2) x := by
+    have := h.localize
+    rwa [IsLocalMinOn, nhdsWithin_univ] at this
+  have hd := first_order_optimality_condition _ _ this
+  have hg :=  HasGradientAt.neg (@gradient_of_sq _ _ _ _ y x)
+  have := f_subdiff_add_smooth hd hg
+  simp only [neg_sub, zero_add] at this
+  have hf : f = (fun u ↦ f u + ‖u - y‖ ^ 2 / 2) + fun x ↦ -(‖x - y‖ ^ 2 / 2) := by
+    ext x
+    simp only [Pi.add_apply, add_neg_cancel_right]
+  exact hf ▸ this
 
-end Lemma
+lemma f_subdiff_smul_prox (h : prox_prop (c • f) u x) (cpos : 0 < c) :
+    c⁻¹ • (u - x) ∈ f_subdifferential f x := f_subdiff_smul (f_subdiff_prox h) cpos
 
 /-the Frechet subdifferential is a closed set-/
 theorem f_subdifferential_closed (f : E → ℝ) (x : E) : IsClosed (f_subdifferential f x) := by
