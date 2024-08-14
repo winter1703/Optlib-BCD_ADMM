@@ -10,7 +10,7 @@ open Filter BigOperators Set Topology
 
 variable {E : Type*}
 variable [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
-variable {f : E → ℝ} {x u : E}
+variable {f : E → ℝ} {x u v : E}
 
 /- the general differential function used in the definition -/
 def differential_fun (x : E) (f : E → ℝ) (u : E) :=
@@ -120,6 +120,57 @@ theorem has_f_subdiff_iff : u ∈ f_subdifferential f x ↔
         rw [← heq, ← EReal.coe_div, EReal.coe_lt_coe_iff]
         linarith
 
+theorem HasGradientAt_iff_f_subdiff :
+    HasGradientAt f u x ↔ u ∈ f_subdifferential f x ∧ -u ∈ f_subdifferential (-f) x := by
+  rw [hasGradientAt_iff_isLittleO, Asymptotics.isLittleO_iff, has_f_subdiff_iff, has_f_subdiff_iff]
+  constructor
+  · intro h
+    constructor
+    · intro ε εpos
+      filter_upwards [h εpos] with y hy
+      rw [Real.norm_eq_abs, abs_le] at hy
+      linarith
+    · intro ε εpos
+      filter_upwards [h εpos] with y hy
+      rw [Real.norm_eq_abs, abs_le] at hy
+      simp only [Pi.neg_apply, sub_neg_eq_add, inner_neg_left, neg_mul]
+      linarith
+  · intro ⟨h1, h2⟩ c cpos
+    filter_upwards [h1 c cpos, h2 c cpos] with y h1y h2y
+    simp only [Pi.neg_apply, sub_neg_eq_add, inner_neg_left, neg_mul] at h2y
+    rw [Real.norm_eq_abs, abs_le]
+    constructor <;> linarith
+
+theorem f_subdiff_neg_f_subdiff_unique (hu : u ∈ f_subdifferential f x)
+    (hv : v ∈ f_subdifferential (-f) x) : u = -v := by
+  rw [has_f_subdiff_iff] at *
+  have h : ∀ ε > 0, ∀ᶠ y in 𝓝 x, ⟪u + v, y - x⟫_ℝ ≤ ε * ‖y - x‖ := by
+    intro ε εpos
+    have ε2pos : 0 < ε / 2 := by positivity
+    filter_upwards [hu _ ε2pos, hv _ ε2pos] with y huy hvy
+    rw [InnerProductSpace.add_left]
+    simp only [Pi.neg_apply, sub_neg_eq_add] at hvy
+    linarith
+  by_cases heq : u + v = 0; exact eq_neg_of_add_eq_zero_left heq
+  apply eq_of_forall_dist_le
+  rw [dist_eq_norm, sub_neg_eq_add]
+  intro ε εpos
+  specialize h ε εpos
+  rw [Metric.eventually_nhds_iff_ball] at h
+  obtain ⟨δ, δpos, hd⟩ := h
+  have hne := norm_ne_zero_iff.mpr heq
+  have hb : x + (δ / 2 / ‖u + v‖) • (u + v) ∈ Metric.ball x δ := by
+    rw [mem_ball_iff_norm', sub_add_cancel_left]
+    rw [norm_neg, norm_smul, Real.norm_eq_abs, abs_div, abs_norm]
+    rw [div_mul_cancel₀ _ hne, abs_of_nonneg (by positivity)]
+    linarith
+  specialize hd (x + ((δ / 2) / ‖u + v‖) • (u + v)) hb
+  rw [add_sub_cancel_left, inner_smul_right, norm_smul, Real.norm_eq_abs, abs_div, abs_norm] at hd
+  rw [real_inner_self_eq_norm_mul_norm, ← mul_assoc, div_mul_cancel₀ _ hne] at hd
+  rw [div_mul_cancel₀ _ hne, abs_of_nonneg (by positivity), mul_comm] at hd
+  exact le_of_mul_le_mul_right hd (by positivity)
+
+
 /- the limit subdifferential is the subset of the Frechet subdifferential-/
 theorem subdifferential_subset (f : E → ℝ) (x : E): f_subdifferential f x ⊆ subdifferential f x :=
   fun v vin ↦ ⟨(fun _ ↦ x), tendsto_const_nhds, tendsto_const_nhds,
@@ -143,19 +194,14 @@ theorem first_order_optimality_condition' (f : E → ℝ) (x₀ : E) (hx: IsLoca
 
 /-The f-subdifferential of a differentiable function is its gradient set-/
 theorem f_subdifferential_gradiant (f : E → ℝ) (f': E → E) (hf : ∀ x₁, HasGradientAt f (f' x₁) x₁)
-    (z : E) : f_subdifferential f z = {f' z} :=by
+    (z : E) : f_subdifferential f z = {f' z} := by
   ext u
-  rw [has_f_subdiff_iff, mem_singleton_iff]
+  rw [mem_singleton_iff]
   specialize hf z
-  rw [hasGradientAt_iff_isLittleO, Asymptotics.isLittleO_iff] at hf
+  rw [HasGradientAt_iff_f_subdiff] at hf
   constructor
-  · intro h
-    sorry
-  · intro h ε εpos
-    specialize hf εpos
-    filter_upwards [hf] with y hy
-    rw [Real.norm_eq_abs, abs_le] at hy
-    linarith [h ▸ hy]
+  · exact fun h ↦(neg_neg (f' z)) ▸ (f_subdiff_neg_f_subdiff_unique h hf.2)
+  · exact fun h ↦ h ▸ hf.1
 
 /-The subdifferential of a differentiable function is its gradient set-/
 
@@ -203,17 +249,21 @@ constructor
 
 section Lemma
 
-theorem f_subdiff_add_smooth {f g : E → ℝ} {u v x : E} (h : u ∈ f_subdifferential f x)
-    (hg : HasGradientAt g v x) : u + v ∈ f_subdifferential (f + g) x := by
+variable {f g : E → ℝ} {u v x : E}
+
+theorem f_subdiff_add (hf : u ∈ f_subdifferential f x) (hg : v ∈ f_subdifferential g x)
+    : u + v ∈ f_subdifferential (f + g) x := by
   rw [has_f_subdiff_iff] at *
-  rw [hasGradientAt_iff_isLittleO, Asymptotics.isLittleO_iff] at hg
   intro ε εpos
   have ε2pos : 0 < ε / 2 := by positivity
-  filter_upwards [h _ ε2pos, hg ε2pos] with y h' hg'
-  rw [Real.norm_eq_abs, abs_le] at hg'
+  filter_upwards [hf _ ε2pos, hg _ ε2pos] with y hfy hgy
   simp only [Pi.add_apply, neg_mul, ge_iff_le, neg_le_sub_iff_le_add]
   rw [InnerProductSpace.add_left]
   linarith
+
+theorem f_subdiff_add_smooth (h : u ∈ f_subdifferential f x)
+    (hg : HasGradientAt g v x) : u + v ∈ f_subdifferential (f + g) x := by
+  exact f_subdiff_add h (HasGradientAt_iff_f_subdiff.mp hg).1
 
 lemma f_subdiff_prox (h : prox_prop f u x) : u - x ∈ f_subdifferential f x := by
   unfold prox_prop at h
