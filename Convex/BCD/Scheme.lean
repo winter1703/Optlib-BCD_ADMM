@@ -1125,7 +1125,6 @@ theorem psiconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Ten
         · apply gconv γ hγ ck dk α z_ monoa conv bd lbdψ
       exact (continuous_iff_seqContinuous.mp (ContDiff.continuous alg.conf)) conv
 
-#check  Ψ_subdiff_bound
 lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
     (limit_set alg.z).Nonempty ∧ ((limit_set alg.z) ⊆ critial_point alg.ψ) := by
   constructor
@@ -1133,7 +1132,7 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : Bd
   have hz : ∀ (n : ℕ), alg.z n ∈ alg.z '' univ:= by intro n; use n; constructor; exact Set.mem_univ n; rfl
   have : ∃ a ∈ closure (alg.z '' univ), ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds a):=
     tendsto_subseq_of_bounded (bd) (hz)
-  rcases this with ⟨a,ha,φ,⟨hmφ,haφ⟩⟩
+  rcases this with ⟨a, _ , φ, ⟨hmφ,haφ⟩⟩
   use a
   simp[limit_set]
   apply (mapClusterPt_iff _ _ _).mpr
@@ -1183,7 +1182,7 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : Bd
       ∧‖v q‖ ≤ ρ * ‖alg.z (φ (q+1) -1 + 1) - alg.z (φ (q+1) -1)‖:=by
       simp [v]
       apply Classical.choose_spec (ieq (φ (q+1) -1))
-    have subadd(q:ℕ):φ (q+1) -1 +1=φ (q+1):= by exact Nat.sub_add_cancel (this (sorryAx ℕ true))
+    have subadd(q:ℕ):φ (q+1) -1 +1=φ (q+1):= Nat.sub_add_cancel (this q)
     simp [subadd] at key
     constructor
     · exact (key n).1
@@ -1219,7 +1218,7 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : Bd
   exact zero_in_partial
 
 
-lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : BddBelow (alg.ψ '' univ)):
+lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ)) :
     Tendsto (fun n ↦ (EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal) atTop (𝓝 0) := by
   apply (nhds_basis_Ioo_pos 0).tendsto_right_iff.mpr
   rintro ε epos
@@ -1241,9 +1240,9 @@ lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : Bdd
     have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
       apply IsCompact.isSeqCompact
       exact bd'.isCompact_closure
-    have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx
-      (∃ᶠ (n : ℕ) in atTop, (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
-    apply hcs.subseq_of_frequently_in even
+    have even n: (alg.z ∘ W) n ∈ closure (alg.z ∘ W '' univ) :=
+        subset_closure (mem_image_of_mem (z ∘ W) trivial)
+    apply hcs.subseq_of_frequently_in (frequently_of_forall even)
   rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
   have z_in : z_ ∈ limit_set alg.z:= by
     simp [limit_set, MapClusterPt]
@@ -1289,7 +1288,7 @@ lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : Bdd
     rcases isBounded_iff_forall_norm_le.mp bd with ⟨C,zin⟩
     use C
     rintro z_ z_in
-    rcases subseq_tendsto_of_neBot z_in with ⟨φ,⟨monoφ,conv⟩⟩
+    rcases subseq_tendsto_of_neBot z_in with ⟨φ, ⟨_, conv⟩⟩
     apply le_of_tendsto'
       (Tendsto.norm conv) (fun n↦zin (alg.z (φ n)) (mem_image_of_mem alg.z (mem_univ (φ n))) )
   constructor
@@ -1391,9 +1390,9 @@ lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : Bdd
       have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
         apply IsCompact.isSeqCompact
         exact bd'.isCompact_closure
-      have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
-        (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
-      apply hcs.subseq_of_frequently_in even
+      have even n : (alg.z ∘ W) n ∈ closure (alg.z ∘ W '' univ) :=
+          subset_closure (mem_image_of_mem (z ∘ W) trivial)
+      apply hcs.subseq_of_frequently_in (frequently_of_forall even)
     rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
     have z_in : z_ ∈ limit_set alg.z:= by
       simp [limit_set, MapClusterPt]
@@ -1601,13 +1600,12 @@ lemma sq_le_mul_le_mean {a b c : ℝ} (h : a ^ 2 ≤ b * c) (hpos : 0 ≤ b + c)
 theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃ M : ℝ, ∀ n, ∑ k in Finset.range n, ‖alg.z (k + 1) - alg.z k‖ ≤ M := by
   have :∃ z_∈ closure (alg.z '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_):= by
-    have hcs:IsSeqCompact (closure (alg.z '' univ)) := by
+    have hcs : IsSeqCompact (closure (alg.z '' univ)) := by
       apply IsCompact.isSeqCompact
       exact bd.isCompact_closure
-    have even: ∃ᶠ n in atTop, alg.z n ∈ closure (alg.z '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
-      BCD.z n ∈ closure (alg.z '' univ)) true
-    exact hcs.subseq_of_frequently_in even
-  rcases this with ⟨z_,z_in,α,⟨monoa,conv⟩⟩
+    have even n : alg.z n ∈ closure (alg.z '' univ) := subset_closure (mem_image_of_mem z trivial)
+    exact hcs.subseq_of_frequently_in (frequently_of_forall even)
+  rcases this with ⟨z_, _, α, ⟨monoa, conv⟩⟩
   rcases Sufficient_Descent1 γ hγ ck dk with ⟨ρ1,ρ1pos,suff_des⟩
   have z_in : z_ ∈ limit_set alg.z:= by
     simp [limit_set, MapClusterPt]
@@ -1663,7 +1661,7 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
         _ < alg.ψ z_ + η := (ieq l1 left_mem_Ici).2
     have L2 : ∀ ε > 0, ∃ l2, ∀k > l2, (EMetric.infEdist (alg.z k) (limit_set alg.z)).toReal< ε := by
       rintro ε epos
-      rcases limitset_property_2 bd lbdψ with tendt
+      rcases limitset_property_2 bd with tendt
       rcases (atTop_basis.tendsto_iff (nhds_basis_abs_sub_lt (0:ℝ))).mp tendt ε epos with ⟨l2,_,ieq⟩
       simp at ieq; exact ⟨l2, fun k kgt ↦ (ieq k (le_of_lt kgt))⟩
     have active (n:ℕ) (ngt0 : n>0) : alg.z n ∈ active_domain alg.ψ := by
@@ -1706,7 +1704,7 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
           (lt_of_le_of_lt (le_max_left l1 l2) ngt))).1⟩
       exact ⟨active n (Nat.zero_lt_of_lt ngt), (lem1 n (le_of_lt (lt_of_le_of_lt
         (le_max_left l1 l2) ngt))).2⟩
-    rcases kl with ⟨ε,eppos,η,etpos,φ,hφ,LL,ieq⟩
+    rcases kl with ⟨ε, _, η, _, φ, hφ, LL, ieq⟩
     -- The rest of proof after using KL property
     let a := fun n ↦ φ (alg.ψ (alg.z (n + LL + 1)) - alg.ψ z_)
     let b := fun n ↦ alg.ψ (alg.z (n + LL + 1)) - alg.ψ (alg.z (n + 1 + LL + 1))
