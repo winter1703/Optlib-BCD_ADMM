@@ -39,10 +39,11 @@ def grad_snd (H : WithLp 2 (E × F) → ℝ) (x : E) : F → F := gradient (fun 
 def grad_fun_snd (H : WithLp 2 (E × F) → ℝ) := fun (x, y) ↦ (grad_snd H x y)
 
 /- The gradient of the prod domain -/
-def grad_comp (H : WithLp 2 (E × F) → ℝ) (x : E) (y : F) : WithLp 2 (E × F) := (grad_fst H y x, grad_snd H x y)
+def grad_comp (H : WithLp 2 (E × F) → ℝ) (z : WithLp 2 (E × F)) : WithLp 2 (E × F) :=
+    (WithLp.equiv 2 (E × F)).symm (grad_fst H z.2 z.1, grad_snd H z.1 z.2)
 
 /- The gradient function of the prod domain -/
-def grad_fun_comp (H : WithLp 2 (E × F) → ℝ) := fun (x, y) ↦ (grad_comp H x y)
+def grad_fun_comp (H : WithLp 2 (E × F) → ℝ) := fun z ↦ (grad_comp H z)
 
 instance instNormedSpaceProdL2 : NormedSpace ℝ (WithLp 2 (E × F)) where
   norm_smul_le := by
@@ -161,27 +162,28 @@ structure BCD (f : E → ℝ) (g : F → ℝ) (H : (WithLp 2 (E × F)) → ℝ) 
 open BCD
 
 /- the notation z in BCD -/
-def BCD.z {self : BCD f g H l x0 y0} : ℕ → WithLp 2 (E × F) := fun n ↦ (self.x n, self.y n)
+def BCD.z {self : BCD f g H l x0 y0} : ℕ → WithLp 2 (E × F) :=
+  fun n ↦ (WithLp.equiv 2 (E × F)).symm (self.x n, self.y n)
 
 /- the notation ψ in BCD -/
 def BCD.ψ {_ : BCD f g H l x0 y0} := fun z : WithLp 2 (E × F) ↦ (f z.1 + g z.2 + H z)
 
--- The lemma used in the first-order condition
--- bcd.f_k has Gradient x according to semicontinuous,
-def BCD.f' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
-  fun u => grad_fst H (self.y k) u
+-- -- The lemma used in the first-order condition
+-- -- bcd.f_k has Gradient x according to semicontinuous,
+-- def BCD.f' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
+--   fun u => grad_fst H (self.y k) u
 
-def BCD.g' {self : BCD f g H l x0 y0} (k : ℕ) : F → F :=
-  fun u => grad_snd H (self.x (k + 1)) u
+-- def BCD.g' {self : BCD f g H l x0 y0} (k : ℕ) : F → F :=
+--   fun u => grad_snd H (self.x (k + 1)) u
 
-def BCD.fprop' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
-  (fun u ↦ (self.c k • grad_fst H (self.y k) u) +
-    (u - (self.x k - self.c k • grad_fst H (self.y k) (self.x k))))
+-- def BCD.fprop' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
+--   (fun u ↦ (self.c k • grad_fst H (self.y k) u) +
+--     (u - (self.x k - self.c k • grad_fst H (self.y k) (self.x k))))
 
--- The prop form of f will induced a function fprop
-def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
-  (fun u ↦ (self.c k • f) u + ‖u - (self.x k -
-    self.c k • grad_fst H (self.y k) (self.x k))‖ ^ 2 / 2)
+-- -- The prop form of f will induced a function fprop
+-- def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
+--   (fun u ↦ (self.c k • f) u + ‖u - (self.x k -
+--     self.c k • grad_fst H (self.y k) (self.x k))‖ ^ 2 / 2)
 
 -- def BCD.gprop {self : BCD f g H l x0 y0} (k : ℕ) :=
 --   (fun u ↦ (self.d k • g) u + ‖u - (self.y k -
@@ -189,7 +191,26 @@ def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
 
 variable {alg : BCD f g H l x0 y0} (γ : ℝ) (hγ : γ > 1)
 
-variable (ck : ∀ k, alg.c k = 1 / (γ * l)) (dk : ∀ k, alg.d k = 1 / (γ * l))
+variable (ck: ∀ k, alg.c k = 1 / (γ * l)) (dk: ∀ k, alg.d k = 1 / (γ * l))
+
+section Assumption
+
+def addElementToSet (A : Set E) (x : E) : Set E := {a + x | a ∈ A}
+
+lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_refl 1)
+
+lemma norm_prod' (x : E) (y : F) : ‖(x, y)‖ = max ‖x‖ ‖y‖ := rfl
+
+lemma comp_norm_le (x : E) (y : F) : (‖x‖ ≤ ‖(x,y)‖) ∧ (‖y‖ ≤ ‖(x,y)‖) :=
+  ⟨le_max_left ‖x‖ ‖y‖, le_max_right ‖x‖ ‖y‖⟩
+
+lemma norm_prod_right_zero (x : E) :
+    @norm (WithLp 2 (E × F)) _ ((x, (0 : F)) : WithLp 2 (E × F)) = ‖x‖ := by
+  rw [WithLp.prod_norm_eq_of_L2] ; simp
+
+lemma norm_prod_left_zero (y : F):
+    @norm (WithLp 2 (E × F)) _ ((0 : E), y) = ‖y‖ := by
+  rw [WithLp.prod_norm_eq_of_L2] ; simp
 
 lemma BCD.cpos : ∀ k, 0 < (alg.c k) := by
   intro k
@@ -203,44 +224,25 @@ lemma BCD.dpos : ∀ k, 0 < (alg.d k) := by
   apply div_pos; norm_num
   apply mul_pos; linarith[hγ]; apply alg.lpos
 
-lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_refl 1)
+lemma sub_prod (x x1 : E) (y y1 : F) : ((x, y) : WithLp 2 (E × F)) - (x1, y1) = (x - x1, y - y1) := rfl
 
-section Assumption
-
-lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_refl 1)
-
->>>>>>> dce4a35865d461afd39bda02ae457f7a6a671d4b
-lemma norm_prod' (x : E) (y : F) : ‖(x, y)‖ = max ‖x‖ ‖y‖ := rfl
-
-lemma comp_norm_le (x : E) (y : F) : (‖x‖ ≤ ‖(x,y)‖) ∧ (‖y‖ ≤ ‖(x,y)‖) :=
-  ⟨le_max_left ‖x‖ ‖y‖, le_max_right ‖x‖ ‖y‖⟩
-
-lemma norm_prod_right_zero (x : E) :
-    @norm (WithLp 2 (E × F)) _ ((x, (0 : F)) : WithLp 2 (E × F)) = ‖x‖ := by
-  rw [WithLp.prod_norm_eq_of_L2] ; simp
-
-lemma norm_prod_left_zero (y : F): ‖((0 : E), y)‖ = ‖y‖ := by
-  rw [norm_prod']
-  rw [norm_zero]; apply le_antisymm
-  apply max_le_iff.2
-  constructor; exact norm_nonneg y
-  norm_num
-  apply le_max_iff.2
-  right; norm_num
+theorem BCD.lip₁ : LipschitzWith l (grad_fun_comp H) := by
+  obtain lip := alg.lip
+  rw [grad_eq_block_grad alg.Hdiff] at lip; exact lip
 
 /- coordinate Lipschitz continuous -/
-theorem block_lip (h : LipschitzWith l (gradient H)) :
-    (∀ y, LipschitzWith l (grad_fst H y)) ∧ (∀ x, LipschitzWith l (grad_snd H x)) := by
-  have h : LipschitzWith l (grad_fun_comp H) := sorry
+theorem BCD.coordinate_lip : (∀ y, LipschitzWith l (grad_fst H y))
+    ∧ (∀ x, LipschitzWith l (grad_snd H x)) := by
+  have h : LipschitzWith l (grad_fun_comp H) := alg.lip₁
   rw [lipschitzWith_iff_norm_sub_le] at h
   constructor
   intro y
   rw [lipschitzWith_iff_norm_sub_le]
   intro x1 x2
-  specialize h (x1,y) (x2,y)
+  specialize h (x1, y) (x2, y)
   simp [grad_fun_comp, grad_comp] at h
   apply le_trans (fst_norm_le_prod_L2 _) at h
-  rw [norm_prod_right_zero] at h
+  simp at h; rw [sub_prod, sub_self, norm_prod_right_zero] at h;
   exact h
   intro x
   rw [lipschitzWith_iff_norm_sub_le]
@@ -248,8 +250,14 @@ theorem block_lip (h : LipschitzWith l (gradient H)) :
   specialize h (x, y1) (x, y2)
   simp [grad_fun_comp,grad_comp] at h
   apply le_trans (snd_norm_le_prod_L2 _) at h
-  rw [norm_prod_left_zero] at h
+  simp at h; rw [sub_prod, sub_self, norm_prod_left_zero] at h;
   exact h
+
+-- /- the composition of the subdifferential -/
+-- theorem ass_comp_subdiff : ∀ (x : E) (y : F),
+--   subdifferential alg.ψ (x,y) = (addElementToSet (subdifferential f x) (grad_fun_fst H (x,y))
+--                                 × addElementToSet (subdifferential g y) (grad_fun_snd H (x,y))) := by
+--   sorry
 
 end Assumption
 
@@ -309,13 +317,14 @@ theorem PALM_Descent (h : E → ℝ) {h' : E → E} (Lₕ: NNReal)
   --   rcases Bornology.IsBounded.exists_norm_le bd with ⟨M, hM⟩
   --   use M; intro k; specialize hM (alg.z k); simp at hM; exact hM
 theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
-  ∀ k, ρ₁ / 2 * ‖alg.z (k+1) - alg.z k‖ ^ 2 ≤ alg.ψ (alg.z k) - alg.ψ (alg.z (k + 1)) := by
+  ∀ k, ρ₁ / 2 * ‖alg.z (k+1) - alg.z k‖ ^ 2 ≤ alg.ψ (alg.z k) -alg.ψ (alg.z (k + 1)) := by
   use (γ - 1) * l
   let ρ₁ := (γ - 1) * l
   have ργL : ρ₁ = (γ - 1) * l := rfl
   constructor; obtain hl := alg.lpos; apply mul_pos; linarith; exact hl;
   constructor; rfl
-  obtain ⟨hfstlip, hsndlip⟩ := block_lip alg.lip
+  obtain Hass := alg.coordinate_lip
+  obtain ⟨hfstlip, hsndlip⟩ := Hass
   intro k
   have hHf : H (alg.x (k + 1), alg.y k) + f (alg.x (k + 1)) ≤ H (alg.x k, alg.y k) + f (alg.x k)
       - 1 / 2 * (γ - 1) * l * ‖alg.x (k + 1) - alg.x k‖ ^ 2 :=
@@ -329,8 +338,7 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
           have : h' x = gradient h x := by simp [h', grad_fst]
           rw [this]
           apply DifferentiableAt.hasGradientAt
-          apply diff_prod₁;
-          exact alg.Hdiff
+          apply diff_prod₁; apply ContDiff.differentiable alg.conf (by simp)
         have cpos : 0 < (alg.c k) := alg.cpos γ hγ ck k
         obtain prop := PALM_Descent h l h1 (hfstlip _) f (alg.c k) cpos (alg.x k) (alg.x (k + 1))
         have h7 : alg.x (k + 1) ∈ prox_set (fun a ↦ alg.c k * f a)
@@ -357,8 +365,7 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
             have : h' y = gradient h y := by simp [h',grad_snd]
             rw [this]
             apply DifferentiableAt.hasGradientAt
-            apply diff_prod₂;
-            exact alg.Hdiff
+            apply diff_prod₂; apply ContDiff.differentiable alg.conf (by simp)
           have dpos : 0 < (alg.d k) := alg.dpos γ hγ dk k
           obtain prop := PALM_Descent h l h1 (hsndlip _) g (alg.d k) dpos (alg.y k) (alg.y (k + 1))
           have h7 : alg.y (k + 1) ∈ prox_set (fun a ↦ alg.d k * g a)
@@ -403,7 +410,7 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
     _ = ρ₁ / 2 * ‖alg.z (k + 1) - alg.z k‖^2 := by
       simp only [WithLp.prod_norm_sq_eq_of_L2]
       rw [Prod.fst_sub, Prod.snd_sub, BCD.z, BCD.z]
-      ring_nf;
+      ring_nf; simp
   exact hPhi
 
 /- the value is monotone -/
@@ -444,7 +451,7 @@ theorem Sufficient_Descent3 (lbdψ : BddBelow (alg.ψ '' univ)) :
     specialize hDescent' (d + 1)
     apply add_le_add hd hDescent'
   simp [BddBelow,lowerBounds,Set.Nonempty] at lbdψ
-  rcases lbdψ with ⟨ψ₀, hψ₀⟩
+  rcases lbdψ with ⟨ψ₀,hψ₀⟩
   have hne' : ∀ n : ℕ ,∑ k ∈ Finset.range (n + 1), ‖alg.z (k + 1) - alg.z k‖ ^ 2
       ≤ 2 / ρ₁ * ((alg.ψ (alg.z 0))- ψ₀) := by
     intro n
@@ -512,7 +519,43 @@ theorem Sufficient_Descent4 (lbdψ : BddBelow (alg.ψ '' univ)):
 
 end descent
 
-section Subgrad_Ub
+section Upperbound_subd
+/-
+  The section of subsequences' properties.
+
+  The key theorems here are just Lec6 p18 & p22.
+
+  1. Prop 1 in p 19.
+
+  - A^k_x, A^k_y ∈ ∂Ψ(x^k, y^k).
+
+    Akx, Aky are defined as a map, and the property will be proved into seperated parts. Just Akx in it and Aky be.
+
+    According to the proof in p19, we prove it in the following lemmas.
+
+    1. The first equation in p19 holds.
+
+      ∃ uᵏ ∈ ∂f, s.t. ∇ₓH(xᵏ, yᵏ) + 1⧸cᵏ (x^(k + 1) - xᵏ) + uᵏ = 0 holds.
+
+    (p19 eq-line 1)
+
+    Use the *prop_prox*, and *first_order_unconstrained* we can derive the partial derivative respect to x of the PALM formula to be zero.
+
+    One should notice that, when we use *first_order_unconstrained*, we need to provide the f' of f manually.
+
+    The last part is use the result of *first_order_unconstrained* to get the result.
+
+    2. The vector addition in the subdifferential set closed.
+
+    3. The euqation "A^k_x = ∇ₓ H( x k , y k ) + uᵏ" holds.
+
+  - Upper Bound of A^k_x.
+
+    Nearly completed, we write the docs later.
+
+
+  2. Theorem in p22, we move them to a new file "IterSequenceProp.lean", need to complete.
+-/
 
 variable {c : ℝ} {f' : E → ℝ} {x u u' : E} {y v : F}
 
@@ -544,11 +587,9 @@ theorem Ψ_subdiff_bound : ∃ ρ > 0, ∀ k,
   · apply f_subdiff_add_smooth
     · apply f_subdiff_block
       · have := f_subdiff_smul_prox (alg.s₁ k) (alg.cpos γ hγ ck k)
-        rwa [sub_right_comm, smul_sub, inv_smul_smul₀] at this
-        exact ne_of_gt (alg.cpos γ hγ ck k)
+        rwa [sub_right_comm, smul_sub, inv_smul_smul₀ (ne_of_gt (alg.cpos γ hγ ck k))] at this
       · have := f_subdiff_smul_prox (alg.s₂ k) (alg.dpos γ hγ dk k)
-        rwa [sub_right_comm, smul_sub, inv_smul_smul₀] at this
-        exact ne_of_gt (alg.dpos γ hγ dk k)
+        rwa [sub_right_comm, smul_sub, inv_smul_smul₀ (ne_of_gt (alg.dpos γ hγ dk k))] at this
     · exact DifferentiableAt.hasGradientAt (Differentiable.differentiableAt alg.Hdiff)
   · apply le_trans (prod_norm_le_block_sum_L2 (alg.subdiff k))
     have h1 : ‖(alg.subdiff k).1‖ ≤ l * (γ + 1) * ‖alg.z (k + 1) - alg.z k‖ := by
@@ -556,20 +597,536 @@ theorem Ψ_subdiff_bound : ∃ ρ > 0, ∀ k,
       sorry
     sorry
 
-end Subgrad_Ub
+end Upperbound_subd
 
 section limit_point
 
-lemma StrictMono_nat (φ : ℕ → ℕ) (hφ: StrictMono φ) : (∀ (n:ℕ), n ≤ (φ n)) := by
-    intro n
-    induction' n with k hk
-    exact Nat.zero_le _
-    have : (k + 1) ≤ φ k + 1 := by linarith
-    apply le_trans this
-    have : φ k + 1 = (φ k).succ := by simp
-    rw [this]; apply Nat.succ_le_iff.mpr; apply hφ; simp
+lemma StrictMono_nat (φ : ℕ → ℕ) (hφ: StrictMono φ) : (∀ (n:ℕ), n ≤ (φ n)) :=
+    fun n ↦ hφ.id_le n
 
-lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
+lemma final (m:ℕ){α:ℕ→ℕ}(monoa:StrictMono α) : ∃ n : ℕ, m ≤ α n := by
+  induction' m with m ih
+  · use 1; linarith
+  rcases ih with ⟨n, ieqq⟩
+  use n + 1
+  have :α n + 1 ≤ α (n + 1):= by
+    apply Nat.succ_le_iff.mpr
+    apply monoa
+    norm_num
+  linarith
+
+lemma fconv (α : ℕ → ℕ) (z_ : WithLp 2 (E×F)) (monoa : StrictMono α)
+    (conv : Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+    (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+    Tendsto (fun n ↦ f (alg.z (α n)).1) atTop (𝓝 (f z_.1)):=by
+  apply (nhds_basis_Ioo_pos (f z_.1)).tendsto_right_iff.mpr
+  rintro ε epos
+  simp only [Ioo]
+  have lef:∀ᶠ (x : ℕ) in atTop, f (alg.z (α x)).1>f z_.1-ε:= by
+    have semi: ∀ᶠ x' in 𝓝 z_.1, f z_.1 -ε < f x':= by
+      apply alg.hf z_.1
+      linarith
+    have :Tendsto (fun n↦ (alg.z (α n)).1) atTop (𝓝 z_.1):= Tendsto.fst_nhds conv
+    exact this semi
+  have rig:∀ᶠ (x : ℕ) in atTop, f (alg.z (α x)).1<f z_.1+ε:= by
+    have ieq (q:ℕ)(hq:1≤α q):alg.c (α q -1) * f (alg.x (α q)) + ⟪alg.x (α q) - alg.x (α q -1),
+      alg.c (α q -1) • grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ ≤
+      alg.c (α q -1) * f z_.1 + ‖z_.1 - alg.x (α q -1)‖ ^ 2 / 2 + ⟪z_.1 - alg.x (α q -1), alg.c (α q -1)•
+      grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ:= by
+      rcases isMinOn_iff.mp (alg.s₁ (α q -1)) z_.1 trivial with ieq
+      simp at ieq
+      rw [←sub_add,norm_add_sq_real,←sub_add,norm_add_sq_real] at ieq
+      repeat rw [add_div] at ieq
+      repeat rw [←add_assoc] at ieq
+      simp [hq] at ieq
+      have :0≤‖alg.x (α q) - alg.x (α q - 1)‖ ^ 2 / 2 := by
+        apply div_nonneg
+        norm_num
+        norm_num
+      linarith [ieq,this]
+    have Hbd : ∃ C, ∀ q : ℕ, ‖(grad_fst H (alg.y (α q -1)) (alg.x (α q -1)))‖≤C:= by
+      rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
+      have con11H:ContinuousOn (fun (x,y)↦grad_fst H y x) (Metric.closedBall (0:WithLp 2 (E×F)) C1) := by
+        apply Continuous.continuousOn
+        have :LipschitzWith l (fun (x,y)↦grad_fst H y x) := by
+          apply lipschitzWith_iff_norm_sub_le.mpr
+          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
+          simp
+          calc
+            ‖grad_fst H y1 x1 - grad_fst H y2 x2‖
+              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
+                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).left
+            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
+              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
+              rw [lipschitzWith_iff_norm_sub_le] at lip
+              specialize lip (x1,y1) (x2,y2)
+              simp [grad_fun_comp, grad_comp] at lip
+              rw [sub_prod] at lip
+              sorry
+        apply LipschitzWith.continuous this
+      have :IsCompact (Metric.closedBall 0 C1) := by exact (isCompact_closedBall 0 C1)
+      rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) E _ _ _
+        (isCompact_closedBall (0:WithLp 2 (E×F)) C1) (fun (x,y)↦grad_fst H y x) con11H with ⟨C,sqsq⟩
+      use C
+      rintro q
+      have :(alg.x (α q -1),alg.y (α q -1))∈Metric.closedBall (0:WithLp 2 (E×F)) C1 := by
+        apply mem_closedBall_iff_norm.mpr
+        simp
+        apply inin (alg.x (α q -1),alg.y (α q -1))
+        have :(alg.x (α q - 1), alg.y (α q - 1))=alg.z (α q -1):= rfl
+        rw [this]
+        exact mem_image_of_mem z trivial
+      have hhhh:= sqsq (alg.x (α q -1),alg.y (α q -1)) this
+      simp at hhhh
+      exact hhhh
+    rcases Hbd with ⟨C,hbd⟩
+    have diflte1:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖alg.x (α q) - alg.x (α q - 1)‖ <ε:= by
+      intro ε epos
+      rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) ε epos with lte
+      simp at lte
+      rcases lte with ⟨a,ie⟩
+      simp
+      rcases final (a+1) monoa with ⟨A,iee⟩
+      use A
+      rintro b Aleb
+      have:Monotone α:= by exact StrictMono.monotone monoa
+      have a1leab:a+1≤ α b := by linarith [StrictMono.monotone monoa Aleb,iee]
+      have :a≤ α b -1:= by exact Nat.le_sub_one_of_lt a1leab
+      calc
+        ‖alg.x (α b) - alg.x (α b - 1)‖≤@norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α b) - alg.x (α b - 1),alg.y (α b) - alg.y (α b - 1)) :=by
+          rw [WithLp.prod_norm_eq_of_L2]
+          simp
+          refine (Real.le_sqrt (norm_nonneg (alg.x (α b) - alg.x (α b - 1)))
+            (Left.add_nonneg (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖)
+            (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖ ))).mpr
+            (le_add_of_nonneg_right (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖))
+        _=‖alg.z (α b) - alg.z (α b - 1)‖:= rfl
+        _<ε:= by
+          have: ‖z (α b - 1 + 1) - z (α b - 1)‖ < ε:=ie (α b - 1) this
+          have eqq:(α b - 1 + 1)=α b:= by
+            apply Nat.sub_add_cancel
+            linarith [a1leab]
+          rw [eqq] at this
+          assumption
+    have diflte2:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q - 1)‖ <ε:= by
+      rintro ε epos
+      have : ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q )‖ <ε/2:= by
+        rcases (atTop_basis.tendsto_iff (@Metric.nhds_basis_ball _ _ z_)).mp conv (ε/2) (half_pos epos) with ⟨n1,_,ieq1⟩
+        simp [dist_eq_norm] at ieq1;simp
+        use n1
+        rintro b n1leb
+        calc
+          ‖z_.1 - alg.x (α b)‖≤‖z_ -z (α b)‖ :=by
+            rw [WithLp.prod_norm_eq_of_L2]
+            simp
+            refine (Real.le_sqrt (norm_nonneg (z_.1 - alg.x (α b)))
+              (Left.add_nonneg (sq_nonneg ‖z_.1 - alg.x (α b)‖)
+              (sq_nonneg ‖z_.2 - alg.y (α b)‖ ))).mpr
+              (le_add_of_nonneg_right (sq_nonneg ‖z_.2 - alg.y (α b)‖))
+          _<ε/2:=by
+            rw [norm_sub_rev]
+            exact ieq1 b n1leb
+      have :∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q )‖ <ε/2∧‖alg.x (α q) - alg.x (α q - 1)‖ <ε/2:= Eventually.and this (diflte1 (ε/2) (half_pos epos))
+      apply Eventually.mono this
+      rintro x ⟨h1,h2⟩
+      calc
+        ‖z_.1 - alg.x (α x - 1)‖=‖z_.1 - alg.x (α x )+(alg.x (α x) - alg.x (α x -1))‖:= by
+          simp
+        _≤‖z_.1 - alg.x (α x)‖+‖alg.x (α x) - alg.x (α x - 1)‖:= by
+          apply norm_add_le
+        _<ε/2+ε/2:= by linarith [h1,h2]
+        _=ε := by exact add_halves ε
+
+    have (k:ℕ→E)(defle:∀ ε > 0, ∀ᶠ (q : ℕ) in atTop, ‖k q‖ < ε):∀ ε>0, ∀ᶠ (q : ℕ) in atTop,abs ⟪k q, alg.c (α q -1) • grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ≤ε:= by
+      rintro ε epos
+      simp at defle;simp
+      by_cases Cpos:0<C
+      · have :0<ε/(C/(γ*l)) := by
+          apply div_pos epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+        rcases defle (ε/(C/(γ*l))) this with ⟨nn,ieq⟩
+        use nn
+        rintro b nleb
+        rw [ck]
+        calc
+          |⟪k b, (1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _≤ε / (C / (γ * ↑l))*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            apply mul_le_mul (le_of_lt (ieq b nleb))
+            trivial
+            repeat apply norm_nonneg
+            apply le_of_lt;apply div_pos;apply epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+          _=ε / (C / (γ * ↑l))*(1 / (γ * ↑l)) *‖ grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            rw [mul_assoc]
+            apply mul_eq_mul_left_iff.mpr
+            left
+            refine
+              norm_smul_of_nonneg ?h.ht (grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1)))
+            apply le_of_lt;apply div_pos;norm_num;apply mul_pos _ alg.lpos;linarith
+          _=ε/C*‖ grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            apply mul_eq_mul_right_iff.mpr;left
+            rw [←div_mul,mul_assoc,mul_one_div,div_self,mul_one]
+            have :0<γ * ↑l:=by apply mul_pos _ alg.lpos;linarith
+            linarith
+          _≤ε/C*C:= by
+            apply mul_le_mul;trivial;apply hbd b;apply norm_nonneg
+            apply le_of_lt ;apply div_pos epos Cpos
+          _=ε:= by
+            refine div_mul_cancel₀ ε ?h;linarith [Cpos]
+      · push_neg at Cpos
+        use 100000
+        rintro b _
+        rw [ck]
+        calc
+          |⟪k b,  (1 / (γ * ↑l))• grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _=‖k b‖*(1 / (γ * ↑l)) *‖grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              :=by
+              rw [mul_assoc]
+              apply mul_eq_mul_left_iff.mpr
+              left
+              refine
+              norm_smul_of_nonneg ?h.ht (grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1)))
+          _≤‖k b‖*(1 / (γ * ↑l))*C:= by
+            apply mul_le_mul
+            trivial;apply hbd b;apply norm_nonneg;apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤0:= by
+            apply mul_nonpos_iff.mpr
+            left
+            refine ⟨?_,Cpos⟩
+            apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤ε:= by linarith
+    simp only [ck] at ieq
+    have finalpos:0<ε/(γ*l)/3:= by
+      apply div_pos;apply div_pos epos;apply mul_pos;linarith;apply alg.lpos;linarith
+    have h1:∀ᶠ (q : ℕ) in atTop,|⟪alg.x (α q) - alg.x (α q - 1), alg.c (α q - 1) • grad_fst H (alg.y (α q - 1)) (alg.x (α q - 1))⟫_ℝ| ≤ε / (γ * ↑l) / 3 :=
+      this (fun q↦alg.x (α q) - alg.x (α q - 1)) (diflte1) (ε/(γ*l)/3) finalpos
+    have h2: ∀ᶠ (q : ℕ) in atTop,|⟪z_.1 - alg.x (α q - 1), alg.c (α q - 1) • grad_fst H (alg.y (α q - 1)) (alg.x (α q - 1))⟫_ℝ| ≤ ε / (γ * ↑l) / 3:=
+      this (fun q↦z_.1 - alg.x (α q - 1)) diflte2 (ε/(γ*l)/3) finalpos
+    have h3: ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q - 1)‖ ^ 2 / 2<(ε/(γ*l)/3):= by
+      refine Eventually.mono (diflte2 (√(2*(ε/(γ*l)/3))) ?_) ?_
+      apply Real.sqrt_pos_of_pos
+      apply mul_pos;norm_num;apply finalpos
+      intro x assx
+      have :‖z_.1 - alg.x (α x - 1)‖^2<(2*(ε/(γ*l)/3)):= by
+        refine (Real.lt_sqrt ?hx).mp ?_
+        apply norm_nonneg
+        exact assx
+      calc
+        ‖z_.1 - alg.x (α x - 1)‖ ^ 2 / 2<(2*(ε/(γ*l)/3))/2:= by
+          apply (div_lt_div_right _).mpr
+          apply this
+          linarith
+        _=(ε/(γ*l)/3):= by
+          apply mul_div_cancel_left₀
+          linarith
+    simp at h1 h2 h3
+    simp only [ck] at h1 h2 h3
+    --rw [ck (α q -1)] at h1
+    simp
+    rcases h1 with ⟨m1,ie1⟩
+    rcases h2 with ⟨m2,ie2⟩
+    rcases h3 with ⟨m3,ie3⟩
+    use 1+max (max m1 m2) m3
+    intro q mleq
+    have m1le:m1≤1+max (max m1 m2) m3:=by linarith [(le_max_left m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m2le:m2≤1+max (max m1 m2) m3:= by linarith [(le_max_right m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m3le:m3≤1+max (max m1 m2) m3:= by linarith [le_max_right (max m1 m2) m3]
+    have :1≤α q := by
+      have :α 0 < α q:= by
+        apply monoa
+        linarith [Nat.le_of_add_right_le mleq]
+      linarith
+    have key:1 / (γ * ↑l) * f (alg.x (α q)) <1 / (γ * ↑l) * f z_.1 +ε / (γ * ↑l):= by
+      linarith [ieq q this,(abs_le.mp (ie1 q (m1le.trans mleq))).1,(abs_le.mp (ie2 q (m2le.trans mleq))).2,ie3 q (m3le.trans mleq),
+        add_thirds (ε / (γ * ↑l))]
+    have ltt:0<γ*l:= by
+      apply mul_pos;linarith;linarith [alg.lpos]
+    calc
+      f (z (α q)).1=f (alg.x (α q)):= rfl
+      _=(γ * ↑l)*(1 / (γ * ↑l) * f (alg.x (α q))):= by
+        rw [←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul]
+      _<(γ * ↑l)*(1 / (γ * ↑l) * f z_.1 + ε / (γ * ↑l)):=(mul_lt_mul_left ltt).mpr key
+      _=f z_.1 + ε:=by
+        rw [mul_add,←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul,mul_div_cancel₀ _ (LT.lt.ne ltt).symm]
+  exact Eventually.and lef rig
+
+lemma gconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+    (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+    Tendsto (fun n ↦ g (alg.z (α n)).2) atTop (𝓝 (g z_.2)):=by
+  apply (nhds_basis_Ioo_pos (g z_.2)).tendsto_right_iff.mpr
+  rintro ε epos
+  simp only [Ioo]
+  have lef:∀ᶠ (x : ℕ) in atTop, g (alg.z (α x)).2>g z_.2-ε:= by
+    have semi: ∀ᶠ x' in 𝓝 z_.2, g z_.2 -ε < g x':= by
+      apply alg.hg z_.2
+      linarith
+    have :Tendsto (fun n↦ (alg.z (α n)).2) atTop (𝓝 z_.2):= Tendsto.snd_nhds conv
+    exact this semi
+  have rig:∀ᶠ (x : ℕ) in atTop, g (alg.z (α x)).2<g z_.2+ε:= by
+    have ieq (q:ℕ)(hq:1≤α q):alg.d (α q - 1) * g (alg.y (α q)) +⟪alg.y (α q) - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q)) (alg.y (α q - 1))⟫_ℝ≤
+        alg.d (α q - 1) * g z_.2 + ‖z_.2 - alg.y (α q - 1)‖ ^ 2 / 2 +⟪z_.2 - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q)) (alg.y (α q - 1))⟫_ℝ:= by
+      rcases isMinOn_iff.mp (alg.s₂ (α q -1)) z_.2 trivial with ieq
+      simp at ieq
+      rw [←sub_add,norm_add_sq_real,←sub_add,norm_add_sq_real] at ieq
+      repeat rw [add_div] at ieq
+      repeat rw [←add_assoc] at ieq
+      simp [hq] at ieq
+      have :0≤‖alg.y (α q) - alg.y (α q - 1)‖ ^ 2 / 2 := by
+        apply div_nonneg
+        norm_num
+        norm_num
+      linarith [ieq,this]
+    have Hbd :∃C,∀q:ℕ ,‖(grad_snd H (alg.x (α q )) (alg.y (α q -1)))‖≤C:= by
+      rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
+      have con11H:ContinuousOn (fun (x,y)↦grad_snd H x y) (Metric.closedBall (0:WithLp 2 (E×F)) (2*C1)) := by
+        apply Continuous.continuousOn
+        have :LipschitzWith l (fun (x,y)↦grad_snd H x y) := by
+          apply lipschitzWith_iff_norm_sub_le.mpr
+          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
+          simp
+          calc
+            ‖grad_snd H x1 y1 - grad_snd H x2 y2‖
+              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
+                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).right
+            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
+              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
+              rw [lipschitzWith_iff_norm_sub_le] at lip
+              specialize lip (x1,y1) (x2,y2)
+              simp [grad_fun_comp,grad_comp] at lip
+              -- exact lip
+              sorry
+        apply LipschitzWith.continuous this
+      rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) F _ _ _ (isCompact_closedBall (0:WithLp 2 (E×F)) (2*C1))
+        (fun (x,y)↦grad_snd H x y) con11H with ⟨C,sqsq⟩
+      use C
+      rintro q
+      have :(alg.x (α q ),alg.y (α q -1))∈Metric.closedBall (0:WithLp 2 (E×F)) (2*C1) := by
+        apply mem_closedBall_iff_norm.mpr
+        simp
+        calc
+          @norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α q),alg.y (α q - 1)) ≤‖alg.x (α q)‖+‖alg.y (α q - 1)‖:=by
+            apply prod_norm_le_block_sum_L2
+          _≤‖alg.z (α q)‖+‖alg.z (α q -1)‖:=by
+            have :‖alg.y (α q -1)‖≤‖alg.z (α q -1)‖:= by
+              rw [WithLp.prod_norm_eq_of_L2]
+              apply (Real.le_sqrt (norm_nonneg (alg.y (α q -1) ))
+              (Left.add_nonneg (sq_nonneg ‖alg.x (α q - 1)‖)
+              (sq_nonneg ‖(alg.y (α q -1) )‖ ))).mpr
+              apply (le_add_of_nonneg_left (sq_nonneg ‖alg.x (α q - 1)‖))
+            have :‖alg.x (α q )‖≤‖alg.z (α q )‖:= by
+              rw [WithLp.prod_norm_eq_of_L2]
+              apply (Real.le_sqrt (norm_nonneg (alg.x (α q ) ))
+              (Left.add_nonneg (sq_nonneg ‖alg.x (α q )‖)
+              (sq_nonneg ‖(alg.y (α q ) )‖ ))).mpr
+              apply (le_add_of_nonneg_right (sq_nonneg ‖alg.y (α q )‖))
+            linarith
+          _≤C1+C1:=by
+            apply add_le_add
+            apply inin
+            exact mem_image_of_mem z trivial
+            apply inin
+            exact mem_image_of_mem z trivial
+          _=2*C1:=Eq.symm (two_mul C1)
+      have hhhh:= sqsq (alg.x (α q ),alg.y (α q -1)) this
+      simp at hhhh
+      exact hhhh
+    rcases Hbd with ⟨C,hbd⟩
+    have diflte1:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖alg.y (α q) - alg.y (α q - 1)‖ <ε:= by
+      intro ε epos
+      rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) ε epos with lte
+      simp at lte
+      rcases lte with ⟨a,ie⟩
+      simp
+      rcases final (a+1) monoa with ⟨A,iee⟩
+      use A
+      rintro b Aleb
+      have:Monotone α:= by exact StrictMono.monotone monoa
+      have a1leab:a+1≤ α b := by linarith [StrictMono.monotone monoa Aleb,iee]
+      have :a≤ α b -1:= by exact Nat.le_sub_one_of_lt a1leab
+      calc
+        ‖alg.y (α b) - alg.y (α b - 1)‖≤@norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α b) - alg.x (α b - 1),alg.y (α b) - alg.y (α b - 1)) :=by
+          rw [WithLp.prod_norm_eq_of_L2]
+          simp
+          refine (Real.le_sqrt (norm_nonneg (alg.y (α b) - alg.y (α b - 1)))
+            (Left.add_nonneg (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖)
+            (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖ ))).mpr
+            (le_add_of_nonneg_left (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖))
+        _=‖alg.z (α b) - alg.z (α b - 1)‖:= rfl
+        _<ε:= by
+          have: ‖z (α b - 1 + 1) - z (α b - 1)‖ < ε:=ie (α b - 1) this
+          have eqq:(α b - 1 + 1)=α b:= by
+            apply Nat.sub_add_cancel
+            linarith [a1leab]
+          rw [eqq] at this
+          assumption
+    have diflte2:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q - 1)‖ <ε:= by
+      rintro ε epos
+      have : ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q )‖ <ε/2:= by
+        rcases (atTop_basis.tendsto_iff (@Metric.nhds_basis_ball _ _ z_)).mp conv (ε/2) (half_pos epos) with ⟨n1,_,ieq1⟩
+        simp [dist_eq_norm] at ieq1;simp
+        use n1
+        rintro b n1leb
+        calc
+          ‖z_.2 - alg.y (α b)‖≤‖z_ -z (α b)‖ :=by
+            rw [WithLp.prod_norm_eq_of_L2]
+            simp
+            refine (Real.le_sqrt (norm_nonneg (z_.2 - alg.y (α b)))
+              (Left.add_nonneg (sq_nonneg ‖z_.1 - alg.x (α b)‖)
+              (sq_nonneg ‖z_.2 - alg.y (α b)‖ ))).mpr
+              (le_add_of_nonneg_left (sq_nonneg ‖z_.1 - alg.x (α b)‖))
+          _<ε/2:=by
+            rw [norm_sub_rev]
+            exact ieq1 b n1leb
+      have :∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q )‖ <ε/2∧‖alg.y (α q) - alg.y (α q - 1)‖ <ε/2
+          := Eventually.and this (diflte1 (ε/2) (half_pos epos))
+      apply Eventually.mono this
+      rintro x ⟨h1,h2⟩
+      calc
+        ‖z_.2 - alg.y (α x - 1)‖=‖z_.2 - alg.y (α x )+(alg.y (α x) - alg.y (α x -1))‖:= by
+          simp
+        _≤‖z_.2 - alg.y (α x)‖+‖alg.y (α x) - alg.y (α x - 1)‖:= by
+          apply norm_add_le
+        _<ε/2+ε/2:= by linarith [h1,h2]
+        _=ε := by exact add_halves ε
+
+    have (k:ℕ→F)(defle:∀ ε > 0, ∀ᶠ (q : ℕ) in atTop, ‖k q‖ < ε):∀ ε>0, ∀ᶠ (q : ℕ) in atTop,abs
+        ⟪k q, alg.d (α q -1) • grad_snd H (alg.x (α q )) (alg.y (α q -1))⟫_ℝ≤ε:= by
+      rintro ε epos
+      simp at defle;simp
+      by_cases Cpos:0<C
+      · have :0<ε/(C/(γ*l)) := by
+          apply div_pos epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+        rcases defle (ε/(C/(γ*l))) this with ⟨nn,ieq⟩
+        use nn
+        rintro b nleb
+        rw [dk]
+        calc
+          |⟪k b, (1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _≤ε / (C / (γ * ↑l))*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            apply mul_le_mul (le_of_lt (ieq b nleb))
+            trivial
+            repeat apply norm_nonneg
+            apply le_of_lt;apply div_pos;apply epos;apply div_pos Cpos;apply mul_pos _ alg.lpos
+            linarith [hγ]
+          _=ε / (C / (γ * ↑l))*(1 / (γ * ↑l)) *‖ grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            rw [mul_assoc]
+            apply mul_eq_mul_left_iff.mpr
+            left
+            refine
+              norm_smul_of_nonneg ?h.ht (grad_snd H (alg.x (α b )) (alg.y (α b - 1)))
+            apply div_nonneg
+            norm_num;apply mul_nonneg
+            linarith [hγ];linarith [alg.lpos]
+          _=ε/C*‖ grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            apply mul_eq_mul_right_iff.mpr;left
+            rw [←div_mul,mul_assoc,mul_one_div,div_self,mul_one]
+            have :0<γ * ↑l:=by apply mul_pos _ alg.lpos;linarith
+            linarith
+          _≤ε/C*C:= by
+            apply mul_le_mul;trivial;apply hbd b;apply norm_nonneg
+            apply le_of_lt ;apply div_pos epos Cpos
+          _=ε:= by
+            refine div_mul_cancel₀ ε ?h;linarith [Cpos]
+      · push_neg at Cpos
+        use 100000
+        rintro b _
+        rw [dk]
+        calc
+          |⟪k b,  (1 / (γ * ↑l))• grad_snd H (alg.x (α b )) (alg.y (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _=‖k b‖*(1 / (γ * ↑l)) *‖grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              :=by
+              rw [mul_assoc]
+              apply mul_eq_mul_left_iff.mpr
+              left
+              refine
+              norm_smul_of_nonneg ?h.ht (grad_snd H (alg.x (α b )) (alg.y (α b - 1)))
+          _≤‖k b‖*(1 / (γ * ↑l))*C:= by
+            apply mul_le_mul
+            trivial;apply hbd b;apply norm_nonneg;apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤0:= by
+            apply mul_nonpos_iff.mpr
+            left
+            refine ⟨?_,Cpos⟩
+            apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤ε:= by linarith
+    simp only [dk] at ieq
+    have finalpos:0<ε/(γ*l)/3:= by
+      apply div_pos;apply div_pos epos;apply mul_pos;linarith;apply alg.lpos;linarith
+    have h1:∀ᶠ (q : ℕ) in atTop,|⟪alg.y (α q) - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H
+        (alg.x (α q )) (alg.y (α q - 1))⟫_ℝ| ≤ε / (γ * ↑l) / 3 :=
+      this (fun q↦alg.y (α q) - alg.y (α q - 1)) (diflte1) (ε/(γ*l)/3) finalpos
+    have h2: ∀ᶠ (q : ℕ) in atTop,|⟪z_.2 - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q ))
+        (alg.y (α q - 1))⟫_ℝ| ≤ ε / (γ * ↑l) / 3:=
+      this (fun q↦z_.2 - alg.y (α q - 1)) diflte2 (ε/(γ*l)/3) finalpos
+    have h3: ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q - 1)‖ ^ 2 / 2<(ε/(γ*l)/3):= by
+      refine Eventually.mono (diflte2 (√(2*(ε/(γ*l)/3))) ?_) ?_
+      apply Real.sqrt_pos_of_pos
+      apply mul_pos;norm_num;apply finalpos
+      intro x assx
+      have :‖z_.2 - alg.y (α x - 1)‖^2<(2*(ε/(γ*l)/3)):= by
+        refine (Real.lt_sqrt ?hy).mp ?_
+        apply norm_nonneg
+        exact assx
+      calc
+        ‖z_.2 - alg.y (α x - 1)‖ ^ 2 / 2<(2*(ε/(γ*l)/3))/2:= by
+          apply (div_lt_div_right _).mpr
+          apply this
+          linarith
+        _=(ε/(γ*l)/3):= by
+          apply mul_div_cancel_left₀
+          linarith
+    simp at h1 h2 h3
+    simp only [dk] at h1 h2 h3
+    simp
+    rcases h1 with ⟨m1,ie1⟩
+    rcases h2 with ⟨m2,ie2⟩
+    rcases h3 with ⟨m3,ie3⟩
+    use 1+max (max m1 m2) m3
+    intro q mleq
+    have m1le:m1≤1+max (max m1 m2) m3:=by linarith [(le_max_left m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m2le:m2≤1+max (max m1 m2) m3:= by linarith [(le_max_right m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m3le:m3≤1+max (max m1 m2) m3:= by linarith [le_max_right (max m1 m2) m3]
+    have :1≤α q := by
+      have :α 0 < α q:= by
+        apply monoa
+        linarith [Nat.le_of_add_right_le mleq]
+      linarith
+    have key:1 / (γ * ↑l) * g (alg.y (α q)) <1 / (γ * ↑l) * g z_.2 +ε / (γ * ↑l):= by
+      linarith [ieq q this,(abs_le.mp (ie1 q (m1le.trans mleq))).1,(abs_le.mp (ie2 q (m2le.trans mleq))).2,
+        ie3 q (m3le.trans mleq),add_thirds (ε / (γ * ↑l))]
+    have ltt:0<γ*l:= by
+      apply mul_pos;linarith;linarith [alg.lpos]
+    calc
+      g (z (α q)).2=g (alg.y (α q)):= rfl
+      _=(γ * ↑l)*(1 / (γ * ↑l) * g (alg.y (α q))):= by
+        rw [←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul]
+      _<(γ * ↑l)*(1 / (γ * ↑l) * g z_.2 + ε / (γ * ↑l)):=(mul_lt_mul_left ltt).mpr key
+      _=g z_.2 + ε:=by
+        rw [mul_add,←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul,mul_div_cancel₀ _ (LT.lt.ne ltt).symm]
+  exact Eventually.and lef rig
+
+--the convergence of subseq implies the convergence of alg.ψ
+theorem psiconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+  (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+  Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
+      apply Tendsto.add
+      · apply Tendsto.add
+        · apply fconv γ hγ ck dk α z_ monoa conv bd lbdψ
+        · apply gconv γ hγ ck dk α z_ monoa conv bd lbdψ
+      exact (continuous_iff_seqContinuous.mp (ContDiff.continuous alg.conf)) conv
+
+#check  Ψ_subdiff_bound
+lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
     (limit_set alg.z).Nonempty ∧ ((limit_set alg.z) ⊆ critial_point alg.ψ) := by
   constructor
   --nonempty
@@ -608,111 +1165,56 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
 
   have: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto ((alg.z) ∘ φ) Filter.atTop (nhds z_) :=
     TopologicalSpace.FirstCountableTopology.tendsto_subseq ha'
-  rcases this with ⟨φ,Monoφ,convergentφ⟩
-  have hH := convergentφ
-  simp [BCD.z, Function.comp] at hH
-  have htendx: Filter.Tendsto (alg.x ∘ φ) Filter.atTop (nhds a.1) := Filter.Tendsto.fst_nhds hH
-  have htendy: Filter.Tendsto (alg.y ∘ φ) Filter.atTop (nhds a.2) := Filter.Tendsto.snd_nhds hH
-  have lower_x: f (a.1) ≤ Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop := by
-    have key : Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop = Filter.liminf f (Filter.map (alg.x ∘ φ) Filter.atTop):=
-      Filter.liminf_comp _ _ _
-    --利用适当函数性质，去证这个(f ∘ (alg.x ∘ φ))必将大于f (a.1)，因为(alg.x ∘ φ)收敛到a.1
-    sorry
-  have lower_y: g (a.2) ≤ Filter.liminf (g ∘ (alg.y ∘ φ)) Filter.atTop := by
-    --同样利用适当函数的性质，这个过程是同上的
-    sorry
-  --上面主要是证明左不等号，拿x来说就是f (a.1) ≤ Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop
-  --下面需要证明反不等号也即是Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop≤f (a.1)
-  --这样可以得到等号，即可完成证明
+  rcases this with ⟨φ,monoφ,conv⟩
 
-  --下面这个不等式主要利用x的迭代公式
-  have a_1_le_x :∀ k:ℕ ,((inner (alg.x (k+1)-alg.x k) (grad_fst H (alg.y k) (alg.x k)))+((2/(alg.c k))*(‖alg.x (k+1)-alg.x k‖^2))
-      +(f (alg.x (k+1)))≤(inner (a.1-alg.x k) (grad_fst H (alg.y k) (alg.x k)))+((2/(alg.c k))*(‖a.1-alg.x k‖^2))+(f (a.1))) :=
-    by
-      intro k
-      have := alg.s₁
-      simp[prox_prop] at this
-      specialize this k
-      rw[isMinOn_iff] at this
-      specialize this a.1
-      have a1_univ : a.1 ∈ univ:= trivial
-      have:= this a1_univ
-      have le_1:(alg.c k * f (alg.x (k + 1)) + ‖alg.x (k + 1) - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖ ^ 2 / 2) /
-          alg.c k ≤(alg.c k * f a.1 + ‖a.1 - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖ ^ 2 / 2) / alg.c k:=
-        div_le_div_of_nonneg_right this (le_of_lt sorry)
-      ring_nf at le_1
-      rw[mul_comm,<-mul_assoc] at le_1
-      ring_nf at le_1
-      rw[mul_inv_cancel,one_mul,one_mul] at le_1
-      ring
-      sorry
-      exact (ne_of_gt sorry)
-  --下面两个大have利用上面不等式去证明反不等号
-  have x_sup_le:Filter.limsup (f ∘ (alg.x ∘ φ)) Filter.atTop ≤ Filter.limsup (fun q =>(inner (a.1-(alg.x ∘ φ) (q-1))
-      (grad_fst H ((alg.y∘φ) (q-1)) ((alg.x∘ φ ) (q-1))))+((2/((alg.c ∘ φ) (q-1)))*
-      (‖a.1-(alg.x∘φ) (q-1)‖^2))+(f (a.1))) Filter.atTop :=
-    by
-    have argmin_le_x:∀ q:ℕ ,(inner ((alg.x ∘ φ) q -(alg.x ∘ φ) (q-1)) (grad_fst H ((alg.y ∘ φ) (q-1))
-        ((alg.x∘φ) (q-1)))+((2/((alg.c ∘ φ) (q-1)))*(‖((alg.x ∘ φ) (q))-((alg.x∘φ) (q-1))‖^2))+(f ((alg.x ∘ φ) (q)))
-        ≤(inner (a.1-(alg.x ∘ φ) (q-1)) (grad_fst H ((alg.y∘φ) (q-1)) ((alg.x∘ φ ) (q-1))))+((2/((alg.c ∘ φ) (q-1)))
-        *(‖a.1-(alg.x∘φ) (q-1)‖^2))+(f (a.1)) ):=
-      by sorry
-    sorry
-  have subφ_xconvergent: Tendsto (f ∘ (alg.x ∘ φ)) atTop (nhds (f (a.1))):=
-    by
-    have sup_x_le:Filter.limsup (f ∘ (alg.x ∘ φ)) Filter.atTop ≤ f (a.1):=
-      by sorry
-    sorry
-
-  --x的部分已然证明，下面去证明y的部分，这个部分与x是一致对称的
-  have a_2_le_y :∀ k:ℕ ,(inner (alg.y (k+1)-alg.y k) (grad_snd H (alg.x k) (alg.y k)))+((2/(alg.d k))*
-      (‖alg.y (k+1)-alg.y k‖^2))+(g (alg.y (k+1)))≤(inner (a.2-alg.y k) (grad_snd H (alg.x k) (alg.y k)))
-      +((2/(alg.d k))*(‖a.2-alg.y k‖^2))+(g (a.2)) :=
-    by
-      intro k
-      have := alg.s₂
-      simp[prox_prop] at this
-      specialize this k
-      rw[isMinOn_iff] at this
-      specialize this a.2
-      have a2_univ : a.2 ∈ univ:= trivial
-      have:= this a2_univ
-      have le_2:(alg.d k * g (alg.y (k + 1)) + ‖alg.y (k + 1) - (alg.y k - alg.d k • grad_snd H
-        (alg.x (k+1)) (alg.y k))‖ ^ 2 / 2) /alg.d k ≤(alg.d k * g a.2 + ‖a.2 - (alg.y k - alg.d k •
-        grad_snd H (alg.x (k+1)) (alg.y k))‖ ^ 2 / 2) / alg.d k:=div_le_div_of_nonneg_right this (le_of_lt sorry)
-      ring_nf at le_2
-      rw[mul_comm,<-mul_assoc] at le_2
-      ring_nf at le_2
-      rw[mul_inv_cancel,one_mul,one_mul] at le_2
-      ring_nf
-      sorry
-      exact (ne_of_gt sorry)
-  --这个部分也与x部分一致，定理的名称是对称的
-  have y_sup_le:Filter.limsup (g ∘ (alg.y ∘ φ)) Filter.atTop ≤ Filter.limsup (fun q =>(inner (a.2-(alg.y ∘ φ) (q-1))
-      (grad_snd H ((alg.x∘φ) (q)) ((alg.y∘ φ ) (q-1))))+((2/((alg.d ∘ φ) (q-1)))
-      *(‖a.2-(alg.y∘φ) (q-1)‖^2))+(g (a.2))) Filter.atTop :=
-    by
-    have argmin_le_y:∀ q:ℕ ,(inner ((alg.y ∘ φ) q -(alg.y ∘ φ) (q-1)) (grad_snd H ((alg.x ∘ φ) q)
-        ((alg.y∘φ) (q-1)))+((2/((alg.d ∘ φ) (q-1)))*(‖((alg.y ∘ φ) (q))-((alg.y∘φ) (q-1))‖^2))+
-        (g ((alg.y ∘ φ) (q)))≤(inner (a.2-(alg.y ∘ φ) (q-1)) (grad_snd H ((alg.x∘φ) (q)) ((alg.y∘ φ ) (q-1))))
-        +((2/((alg.d ∘ φ) (q-1)))*(‖a.2-(alg.y∘φ) (q-1)‖^2))+(g (a.2)) ):=
-      by sorry
-    sorry
-  have subφ_yconvergent: Tendsto (g ∘ (alg.y ∘ φ)) atTop (nhds (g (a.2))):=
-    by
-    have sup_y_le:Filter.limsup (g ∘ (alg.y ∘ φ)) Filter.atTop ≤ g (a.2):=
-      by sorry
-    sorry
-  --x，y部分都证明完等式之后，直接利用定义去证我们需要的结论
-  have zero_in_partial:(0,0)∈ subdifferential alg.ψ (a.1,a.2) :=
-    by
-    have sub_convergent : Tendsto (fun q => alg.ψ (((alg.x∘ φ) q),((alg.y ∘ φ) q))) Filter.atTop (nhds (alg.ψ ((a.1),(a.2)))) :=
-      by sorry
-    have A_in_partial: ∀ q:ℕ ,(((alg.A_kx ∘ φ) q),((alg.A_ky ∘ φ) q)) ∈ f_subdifferential alg.ψ ((alg.x ∘ φ) q,(alg.y ∘ φ) q) :=
-      by sorry
-    have A_convergent: Tendsto (fun q=>(((alg.A_kx ∘ φ) q),((alg.A_ky ∘ φ) q))) Filter.atTop (nhds (0,0)) :=
-      by sorry
-    sorry
+  have zero_in_partial:0∈ subdifferential alg.ψ z_ :=by
+    rw [subdifferential,Set.mem_setOf]
+    use fun n ↦ alg.z (φ (n+1))
+    constructor
+    exact (tendsto_add_atTop_iff_nat 1).mpr conv
+    constructor
+    exact (tendsto_add_atTop_iff_nat 1).mpr (psiconv γ hγ ck dk φ z_ monoφ conv bd lbdψ)
+    rcases Ψ_subdiff_bound γ hγ ck dk with ⟨ρ,ρpos,ieq⟩
+    let v:=fun q↦Classical.choose (ieq (φ (q+1) -1))
+    use v
+    intro n
+    have (q:ℕ):1≤φ (q+1):= (Nat.le_add_left 1 q).trans (StrictMono_nat φ monoφ (q+1))
+    have key (q:ℕ):v q ∈ f_subdifferential alg.ψ (alg.x (φ (q+1) -1 + 1), alg.y (φ (q+1) -1 + 1))
+      ∧‖v q‖ ≤ ρ * ‖alg.z (φ (q+1) -1 + 1) - alg.z (φ (q+1) -1)‖:=by
+      simp [v]
+      apply Classical.choose_spec (ieq (φ (q+1) -1))
+    have subadd(q:ℕ):φ (q+1) -1 +1=φ (q+1):= by exact Nat.sub_add_cancel (this (sorryAx ℕ true))
+    simp [subadd] at key
+    constructor
+    · exact (key n).1
+    apply tendsto_zero_iff_norm_tendsto_zero.mpr
+    apply (nhds_basis_Ioo_pos 0).tendsto_right_iff.mpr
+    rintro ε epos
+    simp
+    rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ)
+      (ε/ρ) (div_pos epos ρpos) with lte
+    simp at lte
+    rcases lte with ⟨a,ieq⟩
+    use a
+    rintro b aleb
+    constructor
+    linarith [norm_nonneg (v b),epos]
+    calc
+      ‖v b‖≤ρ * ‖z (φ (b + 1)) - z (φ (b + 1) - 1)‖:= (key b).2
+      _<ρ*(ε/ρ):=by
+        apply (mul_lt_mul_left ρpos).mpr
+        have :‖alg.z (φ (b + 1)-1+1) - alg.z (φ (b + 1) - 1)‖ < ε / ρ:=by
+          apply ieq
+          apply aleb.trans
+          calc
+            b=b+1-1:= by exact rfl
+            _≤φ (b+1)-1:= Nat.sub_le_sub_right (StrictMono_nat φ monoφ (b+1)) 1
+        simp [subadd b] at this
+        exact this
+      _=ε:=by
+        rw [mul_comm]
+        apply div_mul_cancel₀
+        linarith [ρpos]
   apply Set.mem_setOf.mpr
   exact zero_in_partial
 
@@ -1095,7 +1597,8 @@ lemma sq_le_mul_le_mean {a b c : ℝ} (h : a ^ 2 ≤ b * c) (hpos : 0 ≤ b + c)
     _ ≤ (b + c) ^ 2 := this
   exact (abs_le_of_sq_le_sq' this hpos).2
 
-theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ):
+
+theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃ M : ℝ, ∀ n, ∑ k in Finset.range n, ‖alg.z (k + 1) - alg.z k‖ ≤ M := by
   have :∃ z_∈ closure (alg.z '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_):= by
     have hcs:IsSeqCompact (closure (alg.z '' univ)) := by
@@ -1166,7 +1669,7 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
     have active (n:ℕ) (ngt0 : n>0) : alg.z n ∈ active_domain alg.ψ := by
       simp [active_domain]
       push_neg
-      rcases Ψ_subdiff_bound _ hγ ck dk with ⟨_,_,ex⟩
+      rcases Ψ_subdiff_bound γ hγ ck dk with ⟨_,_,ex⟩
       rcases ex (n-1) with ⟨ d,din,_⟩
       have : d ∈ subdifferential alg.ψ (alg.z n) := by
         apply subdifferential_subset
@@ -1214,12 +1717,13 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       specialize ieq (n + LL + 1) (by linarith)
       obtain ⟨⟨h1, h2⟩, _⟩ := ieq
       constructor <;> linarith
-    obtain ⟨ρ, ρpos, hsgub⟩ := Ψ_subdiff_bound _ hγ ck dk
+    have hlin' n := Ioo_subset_Ico_self (hlin n)
+    obtain ⟨ρ, ρpos, hsgub⟩ := Ψ_subdiff_bound γ hγ ck dk
     let C := ρ / (ρ1 / 2)
     have hnnegC : 0 ≤ C := div_nonneg (le_of_lt ρpos) (by linarith)
     have hposa n : 0 < a n := by
       obtain ⟨_, h2, _, _, _, _⟩ := hφ
-      exact h2 _ (Ioo_subset_Ico_self (hlin n))
+      exact h2 _ (hlin' n)
     have hbd n : 2 * c (n + 1) ≤ c n + C * ((a n) - a (n + 1)) := by
       have hpc : d n * b n ≤ (a n) - a (n + 1) := by
         obtain hderiv := concave_deriv_bound hφ (hlin n) (hlin (n + 1))

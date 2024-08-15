@@ -312,4 +312,12 @@ theorem convex_f_f_subdifferential_eq_subdifferential (f : E → ℝ) (x : E) (h
 
 theorem convex_f_f_subdifferantial_eq_subgradient (f : E → ℝ) (x : E) (hf: LowerSemicontinuous f)
     (hconv : ConvexOn ℝ univ f) : (f_subdifferential f x) = SubderivAt f x := by
-  sorry
+  ext u
+  rw [SubderivAt, mem_setOf, HasSubgradientAt, has_f_subdiff_iff]
+  constructor
+  · intro h
+    sorry
+  · intro h ε εpos
+    filter_upwards with y
+    have : 0 ≤ ε * ‖y - x‖ := by positivity
+    linarith [h y]
