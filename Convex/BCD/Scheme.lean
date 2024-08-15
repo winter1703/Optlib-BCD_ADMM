@@ -17,43 +17,93 @@ def limit_set (z : ℕ → E) :=
 
 end
 
-
 noncomputable section
 
 variable {E F : Type*}
 variable [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
 variable [NormedAddCommGroup F] [InnerProductSpace ℝ F] [CompleteSpace F]
-variable {H : E × F → ℝ} {x : E} {y : F}
+variable {H : WithLp 2 (E × F) → ℝ} {x : E} {y : F}
 
 open Set Bornology Filter BigOperators Topology
 
 /- The gradient of the first component -/
-def grad_fst (H : E × F → ℝ) (y : F) : E → E := gradient (fun t ↦ H (t, y))
+def grad_fst (H : WithLp 2 (E × F) → ℝ) (y : F) : E → E := gradient (fun t ↦ H (t, y))
 
 /- The gradient function of the second component -/
-def grad_fun_fst (H : E × F → ℝ) := fun (x, y) ↦ (grad_fst H y x)
+def grad_fun_fst (H : WithLp 2 (E × F) → ℝ) := fun (x, y) ↦ (grad_fst H y x)
 
 /- The gradient of the second component -/
-def grad_snd (H : E × F → ℝ) (x : E) : F → F := gradient (fun t ↦ H (x, t))
+def grad_snd (H : WithLp 2 (E × F) → ℝ) (x : E) : F → F := gradient (fun t ↦ H (x, t))
 
 /- The gradient function of the second component -/
-def grad_fun_snd (H : E × F → ℝ) := fun (x, y) ↦ (grad_snd H x y)
+def grad_fun_snd (H : WithLp 2 (E × F) → ℝ) := fun (x, y) ↦ (grad_snd H x y)
 
 /- The gradient of the prod domain -/
-def grad_comp (H : E × F → ℝ) (x : E) (y : F) : E × F := (grad_fst H y x, grad_snd H x y)
+def grad_comp (H : WithLp 2 (E × F) → ℝ) (z : WithLp 2 (E × F)) : WithLp 2 (E × F) :=
+    (WithLp.equiv 2 (E × F)).symm (grad_fst H z.2 z.1, grad_snd H z.1 z.2)
 
 /- The gradient function of the prod domain -/
-def grad_fun_comp (H : E × F → ℝ) := fun (x, y) ↦ (grad_comp H x y)
+def grad_fun_comp (H : WithLp 2 (E × F) → ℝ) := fun z ↦ (grad_comp H z)
+
+instance instNormedSpaceProdL2 : NormedSpace ℝ (WithLp 2 (E × F)) where
+  norm_smul_le := by
+    intro a b
+    have : ‖a • b‖ ^ 2 ≤ (‖a‖ * ‖b‖) ^ 2 := by
+      rw [mul_pow, WithLp.prod_norm_sq_eq_of_L2, WithLp.prod_norm_sq_eq_of_L2]
+      simp only [WithLp.smul_fst, WithLp.smul_snd]
+      rw [norm_smul, norm_smul, mul_add, mul_pow, mul_pow]
+    exact norm_smul_le a b
+
+lemma fst_norm_le_prod_L2 (z : WithLp 2 (E × F)) : ‖z.1‖ ≤ ‖z‖ := by
+  have h : ‖z.1‖ ^ 2 ≤ ‖z‖ ^ 2 := by linarith [WithLp.prod_norm_sq_eq_of_L2 z, sq_nonneg ‖z.2‖]
+  apply nonneg_le_nonneg_of_sq_le_sq (norm_nonneg _)
+  rwa [← pow_two, ← pow_two]
+
+lemma snd_norm_le_prod_L2 (z : WithLp 2 (E × F)) : ‖z.2‖ ≤ ‖z‖ := by
+  have h : ‖z.2‖ ^ 2 ≤ ‖z‖ ^ 2 := by linarith [WithLp.prod_norm_sq_eq_of_L2 z, sq_nonneg ‖z.1‖]
+  apply nonneg_le_nonneg_of_sq_le_sq (norm_nonneg _)
+  rwa [← pow_two, ← pow_two]
+
+lemma prod_norm_le_block_sum_L2 (z : WithLp 2 (E × F)) : ‖z‖ ≤ ‖z.1‖ + ‖z.2‖ := by
+  have : ‖z‖ ^ 2 ≤ (‖z.1‖ + ‖z.2‖) ^ 2:= by
+    simp [WithLp.prod_norm_sq_eq_of_L2, add_sq]
+    positivity
+  apply nonneg_le_nonneg_of_sq_le_sq (Left.add_nonneg (norm_nonneg z.1) (norm_nonneg z.2))
+  rwa [← pow_two, ← pow_two]
+
+instance instIsBoundedLinearMapL2equiv :
+    @IsBoundedLinearMap ℝ _ (E × F) _ _ (WithLp 2 (E × F)) _ _ id where
+  map_add := fun x ↦ congrFun rfl
+  map_smul := fun c ↦ congrFun rfl
+  bound := by
+    use 2
+    constructor
+    · norm_num
+    · intro z
+      rw [Prod.norm_def]
+      have h := @prod_norm_le_block_sum_L2 E F _ _ z
+      simp only [id_eq]
+      linarith [h, le_max_left ‖z.1‖ ‖z.2‖, le_max_right ‖z.1‖ ‖z.2‖]
+
+lemma diff_from_l2 (h : Differentiable ℝ H) : @Differentiable ℝ _ (E × F) _ _ ℝ _ _ H := by
+  apply Differentiable.comp h
+  apply IsBoundedLinearMap.differentiable
+  exact instIsBoundedLinearMapL2equiv
 
 theorem diff_prod₁ (h : Differentiable ℝ H) (y : F) :
-    Differentiable ℝ (fun z ↦ H (z, y)) := by
-  apply Differentiable.comp h
+    Differentiable ℝ (fun x ↦ H (x, y)) := by
+  apply Differentiable.comp (diff_from_l2 h)
   exact Differentiable.prod differentiable_id' (differentiable_const y)
 
 theorem diff_prod₂ (h : Differentiable ℝ H) (x : E) :
-    Differentiable ℝ (fun z ↦ H (x, z)) := by
-  apply Differentiable.comp h
+    Differentiable ℝ (fun y ↦ H (x, y)) := by
+  apply Differentiable.comp (diff_from_l2 h)
   exact Differentiable.prod (differentiable_const x) differentiable_id'
+
+theorem grad_eq_block_grad (h : Differentiable ℝ H) : gradient H = grad_fun_comp H := by
+  apply gradient_eq
+  intro z
+  sorry
 
 end
 
@@ -65,83 +115,40 @@ variable {E F : Type*}
 variable [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E] [ProperSpace E]
 variable [NormedAddCommGroup F] [InnerProductSpace ℝ F] [CompleteSpace F] [ProperSpace F]
 variable {f : E → ℝ} {g : F → ℝ}
-variable {H : E × F → ℝ} {x0 : E} {y0 : F} {l : NNReal}
+variable {H : (WithLp 2 (E × F)) → ℝ} {x0 : E} {y0 : F} {l : NNReal}
 
 instance Proper_Prod : ProperSpace (WithLp 2 (E × F)) where
   isCompact_closedBall := by
-    rintro z0 r
-    apply IsSeqCompact.isCompact
-    rintro z zin
-    have in1 : ∀ n, (z n).1 ∈ Metric.closedBall z0.1 r := by
-      intro n
-      have : ‖(z n).1 - z0.1‖ ≤ ‖z n - z0‖ := by
-        rw [WithLp.prod_norm_eq_of_L2]
-        refine (Real.le_sqrt (norm_nonneg _) (Left.add_nonneg (sq_nonneg _) (sq_nonneg _))).mpr
-          (le_add_of_nonneg_right (sq_nonneg _))
-      simp only [mem_closedBall_iff_norm]
-      linarith [mem_closedBall_iff_norm.mp (zin n)]
-    have in2 : ∀ n :ℕ, (z n).2 ∈ Metric.closedBall z0.2 r:= by
-      intro n
-      have : ‖(z n).2 - z0.2‖ ≤ ‖z n - z0‖:= by
-        rw [WithLp.prod_norm_eq_of_L2]
-        refine (Real.le_sqrt (norm_nonneg _) (Left.add_nonneg (sq_nonneg _) (sq_nonneg _))).mpr
-          (le_add_of_nonneg_left (sq_nonneg _))
-      simp only [mem_closedBall_iff_norm]
-      linarith [mem_closedBall_iff_norm.mp (zin n)]
-    obtain sub1 := ((isCompact_closedBall z0.1 r).isSeqCompact).subseq_of_frequently_in
-      (frequently_of_forall in1)
-    rcases sub1 with ⟨a, _, φ1, h1⟩
-    obtain _ : ∀ ε >0, ∀ᶠ n in atTop, (z (φ1 n)).1 ∈ Metric.ball a ε :=
-      Filter.Tendsto.basis_right h1.2 Metric.nhds_basis_ball
-    obtain sub2 := ((isCompact_closedBall z0.2 r).isSeqCompact).subseq_of_frequently_in
-      (frequently_of_forall fun x ↦ in2 (φ1 x))
-    rcases sub2 with ⟨b, _, φ2, h2⟩
-    obtain eve2 := Filter.Tendsto.basis_right h2.2 Metric.nhds_basis_ball
-    have eve1 : ∀ ε > 0, ∀ᶠ n in atTop, (z (φ1 (φ2 n))).1 ∈ Metric.ball a ε:= by
-      have : Tendsto ((fun n ↦ (z (φ1 n)).1) ∘ φ2) atTop (𝓝 a) := by
-        obtain mono2 := StrictMono.tendsto_atTop h2.1
-        calc
-          _ ≤ map (fun n ↦ (z (φ1 n)).1) atTop := by
-            rw [← Filter.map_map]; apply map_mono mono2
-          _ ≤ (𝓝 a) := by exact h1.2
-      apply Filter.Tendsto.basis_right this Metric.nhds_basis_ball
-    have tend : Tendsto (z ∘ φ1 ∘ φ2) atTop (𝓝 (a, b)):= by
-      apply (@Metric.nhds_basis_ball _ _ (a,b)).tendsto_right_iff.mpr
-      intro ε epos
-      have hR : ∀ n, (z (φ1 (φ2 n))).2 ∈ Metric.ball b (ε / 2) ∧ (z (φ1 (φ2 n))).1 ∈
-          Metric.ball a (ε / 2) → (z ∘ φ1 ∘ φ2) n ∈ Metric.ball (a, b) ε := by
-        rintro n ⟨ieq2,ieq1⟩
-        refine mem_ball_iff_norm'.mpr ?intro.a
-        calc
-          _ ≤ ε / 2 := by
-            refine norm_prod_le_iff.mpr ?_; simp
-            exact ⟨le_of_lt (mem_ball_iff_norm'.mp ieq1),le_of_lt (mem_ball_iff_norm'.mp ieq2)⟩
-          _< ε := div_two_lt_of_pos epos
-      apply Filter.Eventually.mono _ hR
-      apply Eventually.and (eve2 (ε / 2) (half_pos epos)) (eve1 (ε / 2) (half_pos epos))
-    refine' ⟨(a, b), _, φ1 ∘ φ2, _, _⟩
-    · apply (@Metric.isClosed_ball _ _ z0 r).mem_of_tendsto tend
-        (eventually_of_forall fun x ↦ zin ((φ1 ∘ φ2) x))
-    · exact fun x y xlty ↦  h1.1 (h2.1 xlty)
-    · exact tend
+    rintro ⟨x, y⟩ r
+    obtain h := IsCompact.prod (isCompact_closedBall x r) (isCompact_closedBall y r)
+    have {a b : ℝ} : a ≤ √(a ^ 2 + b ^ 2) := by apply Real.le_sqrt_of_sq_le; linarith [sq_nonneg b]
+    have hsub : @Metric.closedBall (WithLp 2 (E × F)) _ ⟨x, y⟩ r
+        ⊆ Metric.closedBall x r ×ˢ Metric.closedBall y r := by
+      rintro ⟨x', y'⟩ hball
+      rw [mem_prod]
+      simp only [mem_closedBall_iff_norm, WithLp.prod_norm_eq_of_L2] at *
+      constructor
+      · exact le_trans this hball
+      · exact le_trans this ((add_comm (‖x' - x‖ ^ 2) _) ▸ hball)
+    apply IsCompact.of_isClosed_subset h (@Metric.isClosed_ball (WithLp 2 (E × F)) _ _ _) hsub
 
 /-
   Assumption: f and g are lower semicontinuous, H is continuously differentiable
   ∇ H is l- Lipschitz continuous, f and g are lower bounded
 -/
-class ProblemData (f : E → ℝ) (g : F → ℝ) (H : E × F → ℝ) (l : NNReal) : Prop where
+class ProblemData (f : E → ℝ) (g : F → ℝ) (H : (WithLp 2 (E × F)) → ℝ) (l : NNReal) : Prop where
   lbdf : BddBelow (f '' univ)
   lbdg : BddBelow (g '' univ)
   hf : LowerSemicontinuous f
   hg : LowerSemicontinuous g
   conf : ContDiff ℝ 1 H
   lpos : l > (0 : ℝ)
-  lip : LipschitzWith l (grad_fun_comp H)
+  lip : LipschitzWith l (gradient H)
 
 /-
   The definition of block coordinate descent
 -/
-structure BCD (f : E → ℝ) (g : F → ℝ) (H : E × F → ℝ) (l : NNReal)
+structure BCD (f : E → ℝ) (g : F → ℝ) (H : (WithLp 2 (E × F)) → ℝ) (l : NNReal)
     (x0 : E) (y0 : F) extends ProblemData f g H l where
   x : ℕ → E
   y : ℕ → F
@@ -161,35 +168,26 @@ def BCD.z {self : BCD f g H l x0 y0} : ℕ → WithLp 2 (E × F) :=
 /- the notation ψ in BCD -/
 def BCD.ψ {_ : BCD f g H l x0 y0} := fun z : WithLp 2 (E × F) ↦ (f z.1 + g z.2 + H z)
 
-/- Define the A^k_x -/
-def BCD.A_kx {self : BCD f g H l x0 y0} : ℕ → E :=
-  fun k => (1/(self.c k)) •
-  (self.x k - self.x (k + 1)) - (grad_fst H (self.y k) (self.x k))
+-- -- The lemma used in the first-order condition
+-- -- bcd.f_k has Gradient x according to semicontinuous,
+-- def BCD.f' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
+--   fun u => grad_fst H (self.y k) u
 
-/- Define the A^k_y -/
-def BCD.A_ky {self : BCD f g H l x0 y0} : ℕ → F :=
-  fun k => (1/(self.c k)) • (self.y k - self.y (k + 1)) - (grad_snd H  (self.x (k + 1)) (self.y k))
+-- def BCD.g' {self : BCD f g H l x0 y0} (k : ℕ) : F → F :=
+--   fun u => grad_snd H (self.x (k + 1)) u
 
--- The lemma used in the first-order condition
--- bcd.f_k has Gradient x according to semicontinuous,
-def BCD.f' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
-  fun u => grad_fst H (self.y k) u
+-- def BCD.fprop' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
+--   (fun u ↦ (self.c k • grad_fst H (self.y k) u) +
+--     (u - (self.x k - self.c k • grad_fst H (self.y k) (self.x k))))
 
-def BCD.g' {self : BCD f g H l x0 y0} (k : ℕ) : F → F :=
-  fun u => grad_snd H (self.x (k + 1)) u
+-- -- The prop form of f will induced a function fprop
+-- def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
+--   (fun u ↦ (self.c k • f) u + ‖u - (self.x k -
+--     self.c k • grad_fst H (self.y k) (self.x k))‖ ^ 2 / 2)
 
-def BCD.fprop' {self : BCD f g H l x0 y0} (k : ℕ) : E → E :=
-  (fun u ↦ (self.c k • grad_fst H (self.y k) u) +
-    (u - (self.x k - self.c k • grad_fst H (self.y k) (self.x k))))
-
--- The prop form of f will induced a function fprop
-def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
-  (fun u ↦ (self.c k • f) u + ‖u - (self.x k -
-    self.c k • grad_fst H (self.y k) (self.x k))‖ ^ 2 / 2)
-
-def BCD.gprop {self : BCD f g H l x0 y0} (k : ℕ) :=
-  (fun u ↦ (self.d k • g) u + ‖u - (self.y k -
-    self.c k • grad_snd H (self.x (k + 1)) (self.y k))‖ ^ 2 / 2)
+-- def BCD.gprop {self : BCD f g H l x0 y0} (k : ℕ) :=
+--   (fun u ↦ (self.d k • g) u + ‖u - (self.y k -
+--     self.c k • grad_snd H (self.x (k + 1)) (self.y k))‖ ^ 2 / 2)
 
 variable {alg : BCD f g H l x0 y0} (γ : ℝ) (hγ : γ > 1)
 
@@ -199,69 +197,67 @@ section Assumption
 
 def addElementToSet (A : Set E) (x : E) : Set E := {a + x | a ∈ A}
 
+lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_refl 1)
+
 lemma norm_prod' (x : E) (y : F) : ‖(x, y)‖ = max ‖x‖ ‖y‖ := rfl
 
 lemma comp_norm_le (x : E) (y : F) : (‖x‖ ≤ ‖(x,y)‖) ∧ (‖y‖ ≤ ‖(x,y)‖) :=
   ⟨le_max_left ‖x‖ ‖y‖, le_max_right ‖x‖ ‖y‖⟩
 
-lemma norm_prod_right_zero (x : E) : ‖(x, (0 : F))‖ = ‖x‖ := by
-  rw [norm_prod']
-  rw [norm_zero]; apply le_antisymm
-  apply max_le_iff.2
-  constructor; norm_num
-  exact norm_nonneg x
-  apply le_max_iff.2
-  left; norm_num
+lemma norm_prod_right_zero (x : E) :
+    @norm (WithLp 2 (E × F)) _ ((x, (0 : F)) : WithLp 2 (E × F)) = ‖x‖ := by
+  rw [WithLp.prod_norm_eq_of_L2] ; simp
 
-lemma norm_prod_left_zero (y : F): ‖((0 : E), y)‖ = ‖y‖ := by
-  rw [norm_prod']
-  rw [norm_zero]; apply le_antisymm
-  apply max_le_iff.2
-  constructor; exact norm_nonneg y
-  norm_num
-  apply le_max_iff.2
-  right; norm_num
+lemma norm_prod_left_zero (y : F):
+    @norm (WithLp 2 (E × F)) _ ((0 : E), y) = ‖y‖ := by
+  rw [WithLp.prod_norm_eq_of_L2] ; simp
 
-lemma stepsize_c_lq_zero : ∀ k, 0 < (alg.c k) := by
+lemma BCD.cpos : ∀ k, 0 < (alg.c k) := by
   intro k
   specialize ck k; rw [ck]
   apply div_pos; norm_num
   apply mul_pos; linarith[hγ]; apply alg.lpos
 
-lemma stepsize_d_lq_zero : ∀ k, 0 < (alg.d k) := by
+lemma BCD.dpos : ∀ k, 0 < (alg.d k) := by
   intro k
   specialize dk k; rw [dk]
   apply div_pos; norm_num
   apply mul_pos; linarith[hγ]; apply alg.lpos
 
+lemma sub_prod (x x1 : E) (y y1 : F) : ((x, y) : WithLp 2 (E × F)) - (x1, y1) = (x - x1, y - y1) := rfl
+
+theorem BCD.lip₁ : LipschitzWith l (grad_fun_comp H) := by
+  obtain lip := alg.lip
+  rw [grad_eq_block_grad alg.Hdiff] at lip; exact lip
+
 /- coordinate Lipschitz continuous -/
-theorem ass_coordinate_lip : (∀ y, LipschitzWith l (grad_fst H y))
+theorem BCD.coordinate_lip : (∀ y, LipschitzWith l (grad_fst H y))
     ∧ (∀ x, LipschitzWith l (grad_snd H x)) := by
-  obtain lip : LipschitzWith l (grad_fun_comp H) := alg.lip
-  rw [lipschitzWith_iff_norm_sub_le] at lip
+  have h : LipschitzWith l (grad_fun_comp H) := alg.lip₁
+  rw [lipschitzWith_iff_norm_sub_le] at h
   constructor
   intro y
   rw [lipschitzWith_iff_norm_sub_le]
   intro x1 x2
-  specialize lip (x1,y) (x2,y)
-  simp [grad_fun_comp,grad_comp] at lip
-  apply le_trans ((comp_norm_le _ _).left) at lip
-  rw [norm_prod_right_zero] at lip
-  exact lip
+  specialize h (x1, y) (x2, y)
+  simp [grad_fun_comp, grad_comp] at h
+  apply le_trans (fst_norm_le_prod_L2 _) at h
+  simp at h; rw [sub_prod, sub_self, norm_prod_right_zero] at h;
+  exact h
   intro x
   rw [lipschitzWith_iff_norm_sub_le]
   intro y1 y2
-  specialize lip (x, y1) (x, y2)
-  simp [grad_fun_comp,grad_comp] at lip
-  apply le_trans (comp_norm_le _ _).right at lip
-  rw [norm_prod_left_zero] at lip
-  exact lip
+  specialize h (x, y1) (x, y2)
+  simp [grad_fun_comp,grad_comp] at h
+  apply le_trans (snd_norm_le_prod_L2 _) at h
+  simp at h; rw [sub_prod, sub_self, norm_prod_left_zero] at h;
+  exact h
 
-/- the composition of the subdifferential -/
-theorem ass_comp_subdiff : ∀ (x : E) (y : F),
-  subdifferential alg.ψ (x,y) = (addElementToSet (subdifferential f x) (grad_fun_fst H (x,y))
-                                × addElementToSet (subdifferential g y) (grad_fun_snd H (x,y))) := by
-  sorry
+-- /- the composition of the subdifferential -/
+-- theorem ass_comp_subdiff : ∀ (x : E) (y : F),
+--   subdifferential alg.ψ (x,y) = (addElementToSet (subdifferential f x) (grad_fun_fst H (x,y))
+--                                 × addElementToSet (subdifferential g y) (grad_fun_snd H (x,y))) := by
+--   sorry
 
 end Assumption
 
@@ -327,7 +323,7 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
   have ργL : ρ₁ = (γ - 1) * l := rfl
   constructor; obtain hl := alg.lpos; apply mul_pos; linarith; exact hl;
   constructor; rfl
-  obtain Hass := @ass_coordinate_lip E F _ _ _ _ _ _ f g H x0 y0 l alg
+  obtain Hass := alg.coordinate_lip
   obtain ⟨hfstlip, hsndlip⟩ := Hass
   intro k
   have hHf : H (alg.x (k + 1), alg.y k) + f (alg.x (k + 1)) ≤ H (alg.x k, alg.y k) + f (alg.x k)
@@ -342,8 +338,8 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
           have : h' x = gradient h x := by simp [h', grad_fst]
           rw [this]
           apply DifferentiableAt.hasGradientAt
-          apply diff_prod₁; apply ContDiff.differentiable alg.conf (by rfl)
-        have cpos : 0 < (alg.c k) := stepsize_c_lq_zero γ hγ ck k
+          apply diff_prod₁; apply ContDiff.differentiable alg.conf (by simp)
+        have cpos : 0 < (alg.c k) := alg.cpos γ hγ ck k
         obtain prop := PALM_Descent h l h1 (hfstlip _) f (alg.c k) cpos (alg.x k) (alg.x (k + 1))
         have h7 : alg.x (k + 1) ∈ prox_set (fun a ↦ alg.c k * f a)
             (alg.x k - alg.c k • h' (alg.x k)) :=by
@@ -369,8 +365,8 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
             have : h' y = gradient h y := by simp [h',grad_snd]
             rw [this]
             apply DifferentiableAt.hasGradientAt
-            apply diff_prod₂; apply ContDiff.differentiable alg.conf (by rfl)
-          have dpos : 0 < (alg.d k) := stepsize_d_lq_zero γ hγ dk k
+            apply diff_prod₂; apply ContDiff.differentiable alg.conf (by simp)
+          have dpos : 0 < (alg.d k) := alg.dpos γ hγ dk k
           obtain prop := PALM_Descent h l h1 (hsndlip _) g (alg.d k) dpos (alg.y k) (alg.y (k + 1))
           have h7 : alg.y (k + 1) ∈ prox_set (fun a ↦ alg.d k * g a)
               (alg.y k - alg.d k • h' (alg.y k)) :=by
@@ -561,106 +557,590 @@ section Upperbound_subd
   2. Theorem in p22, we move them to a new file "IterSequenceProp.lean", need to complete.
 -/
 
-lemma f_hasDeriv (k : ℕ) : ∀ (x : E), HasGradientAt f ((fun x => grad_fst H (alg.y k) x) x) x := by
+variable {c : ℝ} {f' : E → ℝ} {x u u' : E} {y v : F}
+
+lemma f_subdiff_block (hf : u ∈ f_subdifferential f x) (hg : v ∈ f_subdifferential g y) :
+    ⟨u, v⟩ ∈ f_subdifferential (fun z ↦ f z.1 + g z.2 : WithLp 2 (E × F) → ℝ) ⟨x, y⟩ := by
+  rw [has_f_subdiff_iff] at *
+  intro ε εpos
   sorry
 
-theorem rw_fprop (k : ℕ) : alg.fprop k = (fun u ↦ (alg.c k • f) u +
-  ‖u - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖^2 / 2) := by rfl
+/- Define the A^k_x -/
+def BCD.A_kx k := (alg.c k)⁻¹ • (alg.x k - alg.x (k + 1)) - (grad_fst H (alg.y k) (alg.x k))
 
-theorem fprop_HasGradient (k : ℕ) : ∀ (x : E), HasGradientAt (alg.fprop k) (alg.fprop' k x) x := by
-  intro x
-  sorry
+/- Define the A^k_y -/
+def BCD.A_ky k := (alg.d k)⁻¹ • (alg.y k - alg.y (k + 1)) - (grad_snd H (alg.x (k + 1)) (alg.y k))
 
-theorem fprop_Continuous (k : ℕ) : ContinuousOn (alg.fprop' k) univ := by
-  sorry
+def BCD.A_k (k : ℕ) : WithLp 2 (E × F) := (alg.A_kx k, alg.A_ky k)
 
-lemma fprop'_eq_zero_at_xk (k : ℕ) : (alg.fprop' k) (alg.x (k + 1)) = 0:= by
-  obtain propx := (alg.s₁ k)
-  rw [prox_prop, ← rw_fprop k] at propx
-  apply first_order_unconstrained (fprop_HasGradient k) (by trivial)
-  apply fprop_Continuous
+def BCD.subdiff k := alg.A_k k + gradient H (alg.x (k + 1), alg.y (k + 1))
 
-lemma g_hasGradient_at_yk (k : ℕ) : ∀ (y : F), HasGradientAt g (alg.g' k y) y := by
-  sorry
-
-lemma g'_eq_zero_at_xk (k : ℕ) : ∀ (y : F), alg.g' k y = 0 := by
-  sorry
-
--- The prop 1 in Lec6.p18
-theorem A_ks_both_are_subdiff (k : ℕ) :
-    (alg.A_kx k ∈ f_subdifferential f (alg.x k)) ∧ (alg.A_ky k ∈ f_subdifferential g (alg.y k)) := by
-  -- Rename some long expr
-  let xk := (alg.x k)
-  have h1: xk = (alg.x k) := by rfl
-  rw[← h1]
-
-  let fn := (fun u ↦ (alg.c k • f) u + ‖u - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖^2 / 2)
-  have h_fn: fn = (fun u ↦ (alg.c k • f) u + ‖u - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖^2 / 2) := by rfl
-
-  let prox_x := alg.s₁ k
-  rw[prox_prop] at prox_x
-  rw [← h_fn] at prox_x
-
-  -- Formal Proof
-  apply And.intro
-  .
-    let fn' := (fun (u : E) ↦ (grad_fst H (alg.y k) u + ((1/(alg.c k)) • (u - (alg.x k)))))
-    have lem_fn': fn' = (fun (u : E) ↦ (grad_fst H (alg.y k) u + ((1/(alg.c k)) • (u - (alg.x k))))) := by rfl
-
-    have h_fn: ∀ x : E, HasGradientAt fn (fn' x) x := by
+theorem Ψ_subdiff_bound : ∃ ρ > 0, ∀ k,
+    ∃ dΨ ∈ f_subdifferential alg.ψ (alg.z (k + 1)), ‖dΨ‖ ≤ ρ * ‖alg.z (k + 1) - alg.z k‖ := by
+  use l * (2 * γ + 2)
+  constructor
+  · let lpos := alg.lpos
+    positivity
+  intro k
+  use alg.subdiff k
+  constructor
+  · apply f_subdiff_add_smooth
+    · apply f_subdiff_block
+      · have := f_subdiff_smul_prox (alg.s₁ k) (alg.cpos γ hγ ck k)
+        rwa [sub_right_comm, smul_sub, inv_smul_smul₀ (ne_of_gt (alg.cpos γ hγ ck k))] at this
+      · have := f_subdiff_smul_prox (alg.s₂ k) (alg.dpos γ hγ dk k)
+        rwa [sub_right_comm, smul_sub, inv_smul_smul₀ (ne_of_gt (alg.dpos γ hγ dk k))] at this
+    · exact DifferentiableAt.hasGradientAt (Differentiable.differentiableAt alg.Hdiff)
+  · apply le_trans (prod_norm_le_block_sum_L2 (alg.subdiff k))
+    have h1 : ‖(alg.subdiff k).1‖ ≤ l * (γ + 1) * ‖alg.z (k + 1) - alg.z k‖ := by
+      simp only [BCD.subdiff, BCD.A_kx, Prod.fst_add, grad_fun_comp, grad_comp, sub_add]
       sorry
-
-    have h_fnc : ContinuousOn fn' univ := by
-      sorry
-
-    have h_d_0: grad_fst H (alg.y k) (alg.x (k + 1))  + (1 / alg.c k) • ((alg.x (k + 1))  - alg.x k) = 0 := by
-      apply first_order_unconstrained h_fn prox_x h_fnc
-
-    have h_ukx: (grad_fst H (alg.y k) (alg.x k)) ∈ f_subdifferential f xk := by
-      sorry
-
-    have h_part_x: grad_fst H (alg.y k) (alg.x (k + 1)) + (1 / alg.c k) • (alg.x (k + 1) - alg.x k) ∈ f_subdifferential f xk := by
-      sorry
-
-    have h_Akx: ∀ (k : ℕ), alg.A_kx k = grad_fst H (alg.y (k + 1)) (alg.x (k + 1)) + (1 / alg.c k) • (alg.x (k + 1) - alg.x k) - (grad_fst H (alg.y k) (alg.x k)) := by
-      intro k
-      rw[A_kx]
-
-      sorry
-
-    have rst: alg.A_kx k ∈ f_subdifferential f xk := by
-      rw[A_kx]
-      sorry
-
     sorry
-
-  . sorry
-
-theorem A_ky_upper_bound : ∀ k, ‖alg.A_ky k‖ ≤ ((1 / (alg.d k)) + 1) * l * ‖alg.z k - alg.z (k + 1)‖ := by
-  sorry
-
-theorem A_ks_uppder_bound : ∀ k, ∃ (γ : ℝ), ‖alg.A_kx k‖ ≤ (2 * γ + 2) * l * ‖alg.z k - alg.z (k + 1)‖ := by
-  sorry
-
-theorem Ψ_subdiff_bound : ∃ ρ > 0, ∀ k, ∃ dΨ ∈ f_subdifferential alg.ψ ((alg.x (k + 1), alg.y (k + 1))),
-  ‖dΨ‖ ≤ ρ * ‖alg.z (k + 1) - alg.z k‖ := by sorry
 
 end Upperbound_subd
 
 section limit_point
 
-lemma StrictMono_nat (φ : ℕ → ℕ) (hφ: StrictMono φ) : (∀ (n:ℕ), n ≤ (φ n)) := by
-    intro n
-    induction' n with k hk
-    exact Nat.zero_le _
-    have : (k + 1) ≤ φ k + 1 := by linarith
-    apply le_trans this
-    have : φ k + 1 = (φ k).succ := by simp
-    rw [this]; apply Nat.succ_le_iff.mpr; apply hφ; simp
+section limit_point
 
-lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
+lemma StrictMono_nat (φ : ℕ → ℕ) (hφ: StrictMono φ) : (∀ (n:ℕ), n ≤ (φ n)) :=
+    fun n ↦ hφ.id_le n
+
+theorem tri (z : WithLp 2 (E × F)) : ‖z‖ ≤ ‖z.1‖ + ‖z.2‖:= by
+  have : ‖z‖ ^ 2 ≤ (‖z.1‖ + ‖z.2‖) ^ 2:= by
+    simp [WithLp.prod_norm_sq_eq_of_L2, add_sq]
+    refine mul_nonneg (mul_nonneg ?ha (norm_nonneg _)) (norm_nonneg _)
+    norm_num
+  apply nonneg_le_nonneg_of_sq_le_sq (Left.add_nonneg (norm_nonneg z.1) (norm_nonneg z.2))
+  rw [← pow_two, ← pow_two]
+  exact this
+
+lemma final (m:ℕ){α:ℕ→ℕ}(monoa:StrictMono α) : ∃ n : ℕ, m ≤ α n := by
+  induction' m with m ih
+  · use 1; linarith
+  rcases ih with ⟨n, ieqq⟩
+  use n + 1
+  have :α n + 1 ≤ α (n + 1):= by
+    apply Nat.succ_le_iff.mpr
+    apply monoa
+    norm_num
+  linarith
+
+lemma fconv (α : ℕ → ℕ) (z_ : WithLp 2 (E×F)) (monoa : StrictMono α)
+    (conv : Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+    (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+    Tendsto (fun n ↦ f (alg.z (α n)).1) atTop (𝓝 (f z_.1)):=by
+  apply (nhds_basis_Ioo_pos (f z_.1)).tendsto_right_iff.mpr
+  rintro ε epos
+  simp only [Ioo]
+  have lef:∀ᶠ (x : ℕ) in atTop, f (alg.z (α x)).1>f z_.1-ε:= by
+    have semi: ∀ᶠ x' in 𝓝 z_.1, f z_.1 -ε < f x':= by
+      apply alg.hf z_.1
+      linarith
+    have :Tendsto (fun n↦ (alg.z (α n)).1) atTop (𝓝 z_.1):= Tendsto.fst_nhds conv
+    exact this semi
+  have rig:∀ᶠ (x : ℕ) in atTop, f (alg.z (α x)).1<f z_.1+ε:= by
+    have ieq (q:ℕ)(hq:1≤α q):alg.c (α q -1) * f (alg.x (α q)) + ⟪alg.x (α q) - alg.x (α q -1),
+      alg.c (α q -1) • grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ ≤
+      alg.c (α q -1) * f z_.1 + ‖z_.1 - alg.x (α q -1)‖ ^ 2 / 2 + ⟪z_.1 - alg.x (α q -1), alg.c (α q -1)•
+      grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ:= by
+      rcases isMinOn_iff.mp (alg.s₁ (α q -1)) z_.1 trivial with ieq
+      simp at ieq
+      rw [←sub_add,norm_add_sq_real,←sub_add,norm_add_sq_real] at ieq
+      repeat rw [add_div] at ieq
+      repeat rw [←add_assoc] at ieq
+      simp [hq] at ieq
+      have :0≤‖alg.x (α q) - alg.x (α q - 1)‖ ^ 2 / 2 := by
+        apply div_nonneg
+        norm_num
+        norm_num
+      linarith [ieq,this]
+    have Hbd : ∃ C, ∀ q : ℕ, ‖(grad_fst H (alg.y (α q -1)) (alg.x (α q -1)))‖≤C:= by
+      rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
+      have con11H:ContinuousOn (fun (x,y)↦grad_fst H y x) (Metric.closedBall (0:WithLp 2 (E×F)) C1) := by
+        apply Continuous.continuousOn
+        have :LipschitzWith l (fun (x,y)↦grad_fst H y x) := by
+          apply lipschitzWith_iff_norm_sub_le.mpr
+          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
+          simp
+          calc
+            ‖grad_fst H y1 x1 - grad_fst H y2 x2‖
+              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
+                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).left
+            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
+              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
+              rw [lipschitzWith_iff_norm_sub_le] at lip
+              specialize lip (x1,y1) (x2,y2)
+              simp [grad_fun_comp, grad_comp] at lip
+              rw [sub_prod] at lip
+              sorry
+        apply LipschitzWith.continuous this
+      have :IsCompact (Metric.closedBall 0 C1) := by exact (isCompact_closedBall 0 C1)
+      rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) E _ _ _
+        (isCompact_closedBall (0:WithLp 2 (E×F)) C1) (fun (x,y)↦grad_fst H y x) con11H with ⟨C,sqsq⟩
+      use C
+      rintro q
+      have :(alg.x (α q -1),alg.y (α q -1))∈Metric.closedBall (0:WithLp 2 (E×F)) C1 := by
+        apply mem_closedBall_iff_norm.mpr
+        simp
+        apply inin (alg.x (α q -1),alg.y (α q -1))
+        have :(alg.x (α q - 1), alg.y (α q - 1))=alg.z (α q -1):= rfl
+        rw [this]
+        exact mem_image_of_mem z trivial
+      have hhhh:= sqsq (alg.x (α q -1),alg.y (α q -1)) this
+      simp at hhhh
+      exact hhhh
+    rcases Hbd with ⟨C,hbd⟩
+    have diflte1:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖alg.x (α q) - alg.x (α q - 1)‖ <ε:= by
+      intro ε epos
+      rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) ε epos with lte
+      simp at lte
+      rcases lte with ⟨a,ie⟩
+      simp
+      rcases final (a+1) monoa with ⟨A,iee⟩
+      use A
+      rintro b Aleb
+      have:Monotone α:= by exact StrictMono.monotone monoa
+      have a1leab:a+1≤ α b := by linarith [StrictMono.monotone monoa Aleb,iee]
+      have :a≤ α b -1:= by exact Nat.le_sub_one_of_lt a1leab
+      calc
+        ‖alg.x (α b) - alg.x (α b - 1)‖≤@norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α b) - alg.x (α b - 1),alg.y (α b) - alg.y (α b - 1)) :=by
+          rw [WithLp.prod_norm_eq_of_L2]
+          simp
+          refine (Real.le_sqrt (norm_nonneg (alg.x (α b) - alg.x (α b - 1)))
+            (Left.add_nonneg (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖)
+            (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖ ))).mpr
+            (le_add_of_nonneg_right (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖))
+        _=‖alg.z (α b) - alg.z (α b - 1)‖:= rfl
+        _<ε:= by
+          have: ‖z (α b - 1 + 1) - z (α b - 1)‖ < ε:=ie (α b - 1) this
+          have eqq:(α b - 1 + 1)=α b:= by
+            apply Nat.sub_add_cancel
+            linarith [a1leab]
+          rw [eqq] at this
+          assumption
+    have diflte2:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q - 1)‖ <ε:= by
+      rintro ε epos
+      have : ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q )‖ <ε/2:= by
+        rcases (atTop_basis.tendsto_iff (@Metric.nhds_basis_ball _ _ z_)).mp conv (ε/2) (half_pos epos) with ⟨n1,_,ieq1⟩
+        simp [dist_eq_norm] at ieq1;simp
+        use n1
+        rintro b n1leb
+        calc
+          ‖z_.1 - alg.x (α b)‖≤‖z_ -z (α b)‖ :=by
+            rw [WithLp.prod_norm_eq_of_L2]
+            simp
+            refine (Real.le_sqrt (norm_nonneg (z_.1 - alg.x (α b)))
+              (Left.add_nonneg (sq_nonneg ‖z_.1 - alg.x (α b)‖)
+              (sq_nonneg ‖z_.2 - alg.y (α b)‖ ))).mpr
+              (le_add_of_nonneg_right (sq_nonneg ‖z_.2 - alg.y (α b)‖))
+          _<ε/2:=by
+            rw [norm_sub_rev]
+            exact ieq1 b n1leb
+      have :∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q )‖ <ε/2∧‖alg.x (α q) - alg.x (α q - 1)‖ <ε/2:= Eventually.and this (diflte1 (ε/2) (half_pos epos))
+      apply Eventually.mono this
+      rintro x ⟨h1,h2⟩
+      calc
+        ‖z_.1 - alg.x (α x - 1)‖=‖z_.1 - alg.x (α x )+(alg.x (α x) - alg.x (α x -1))‖:= by
+          simp
+        _≤‖z_.1 - alg.x (α x)‖+‖alg.x (α x) - alg.x (α x - 1)‖:= by
+          apply norm_add_le
+        _<ε/2+ε/2:= by linarith [h1,h2]
+        _=ε := by exact add_halves ε
+
+    have (k:ℕ→E)(defle:∀ ε > 0, ∀ᶠ (q : ℕ) in atTop, ‖k q‖ < ε):∀ ε>0, ∀ᶠ (q : ℕ) in atTop,abs ⟪k q, alg.c (α q -1) • grad_fst H (alg.y (α q -1)) (alg.x (α q -1))⟫_ℝ≤ε:= by
+      rintro ε epos
+      simp at defle;simp
+      by_cases Cpos:0<C
+      · have :0<ε/(C/(γ*l)) := by
+          apply div_pos epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+        rcases defle (ε/(C/(γ*l))) this with ⟨nn,ieq⟩
+        use nn
+        rintro b nleb
+        rw [ck]
+        calc
+          |⟪k b, (1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _≤ε / (C / (γ * ↑l))*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            apply mul_le_mul (le_of_lt (ieq b nleb))
+            trivial
+            repeat apply norm_nonneg
+            apply le_of_lt;apply div_pos;apply epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+          _=ε / (C / (γ * ↑l))*(1 / (γ * ↑l)) *‖ grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            rw [mul_assoc]
+            apply mul_eq_mul_left_iff.mpr
+            left
+            refine
+              norm_smul_of_nonneg ?h.ht (grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1)))
+            apply le_of_lt;apply div_pos;norm_num;apply mul_pos _ alg.lpos;linarith
+          _=ε/C*‖ grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖:= by
+            apply mul_eq_mul_right_iff.mpr;left
+            rw [←div_mul,mul_assoc,mul_one_div,div_self,mul_one]
+            have :0<γ * ↑l:=by apply mul_pos _ alg.lpos;linarith
+            linarith
+          _≤ε/C*C:= by
+            apply mul_le_mul;trivial;apply hbd b;apply norm_nonneg
+            apply le_of_lt ;apply div_pos epos Cpos
+          _=ε:= by
+            refine div_mul_cancel₀ ε ?h;linarith [Cpos]
+      · push_neg at Cpos
+        use 100000
+        rintro b _
+        rw [ck]
+        calc
+          |⟪k b,  (1 / (γ * ↑l))• grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _=‖k b‖*(1 / (γ * ↑l)) *‖grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1))‖
+              :=by
+              rw [mul_assoc]
+              apply mul_eq_mul_left_iff.mpr
+              left
+              refine
+              norm_smul_of_nonneg ?h.ht (grad_fst H (alg.y (α b - 1)) (alg.x (α b - 1)))
+          _≤‖k b‖*(1 / (γ * ↑l))*C:= by
+            apply mul_le_mul
+            trivial;apply hbd b;apply norm_nonneg;apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤0:= by
+            apply mul_nonpos_iff.mpr
+            left
+            refine ⟨?_,Cpos⟩
+            apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤ε:= by linarith
+    simp only [ck] at ieq
+    have finalpos:0<ε/(γ*l)/3:= by
+      apply div_pos;apply div_pos epos;apply mul_pos;linarith;apply alg.lpos;linarith
+    have h1:∀ᶠ (q : ℕ) in atTop,|⟪alg.x (α q) - alg.x (α q - 1), alg.c (α q - 1) • grad_fst H (alg.y (α q - 1)) (alg.x (α q - 1))⟫_ℝ| ≤ε / (γ * ↑l) / 3 :=
+      this (fun q↦alg.x (α q) - alg.x (α q - 1)) (diflte1) (ε/(γ*l)/3) finalpos
+    have h2: ∀ᶠ (q : ℕ) in atTop,|⟪z_.1 - alg.x (α q - 1), alg.c (α q - 1) • grad_fst H (alg.y (α q - 1)) (alg.x (α q - 1))⟫_ℝ| ≤ ε / (γ * ↑l) / 3:=
+      this (fun q↦z_.1 - alg.x (α q - 1)) diflte2 (ε/(γ*l)/3) finalpos
+    have h3: ∀ᶠ (q : ℕ) in atTop,‖z_.1 - alg.x (α q - 1)‖ ^ 2 / 2<(ε/(γ*l)/3):= by
+      refine Eventually.mono (diflte2 (√(2*(ε/(γ*l)/3))) ?_) ?_
+      apply Real.sqrt_pos_of_pos
+      apply mul_pos;norm_num;apply finalpos
+      intro x assx
+      have :‖z_.1 - alg.x (α x - 1)‖^2<(2*(ε/(γ*l)/3)):= by
+        refine (Real.lt_sqrt ?hx).mp ?_
+        apply norm_nonneg
+        exact assx
+      calc
+        ‖z_.1 - alg.x (α x - 1)‖ ^ 2 / 2<(2*(ε/(γ*l)/3))/2:= by
+          apply (div_lt_div_right _).mpr
+          apply this
+          linarith
+        _=(ε/(γ*l)/3):= by
+          apply mul_div_cancel_left₀
+          linarith
+    simp at h1 h2 h3
+    simp only [ck] at h1 h2 h3
+    --rw [ck (α q -1)] at h1
+    simp
+    rcases h1 with ⟨m1,ie1⟩
+    rcases h2 with ⟨m2,ie2⟩
+    rcases h3 with ⟨m3,ie3⟩
+    use 1+max (max m1 m2) m3
+    intro q mleq
+    have m1le:m1≤1+max (max m1 m2) m3:=by linarith [(le_max_left m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m2le:m2≤1+max (max m1 m2) m3:= by linarith [(le_max_right m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m3le:m3≤1+max (max m1 m2) m3:= by linarith [le_max_right (max m1 m2) m3]
+    have :1≤α q := by
+      have :α 0 < α q:= by
+        apply monoa
+        linarith [Nat.le_of_add_right_le mleq]
+      linarith
+    have key:1 / (γ * ↑l) * f (alg.x (α q)) <1 / (γ * ↑l) * f z_.1 +ε / (γ * ↑l):= by
+      linarith [ieq q this,(abs_le.mp (ie1 q (m1le.trans mleq))).1,(abs_le.mp (ie2 q (m2le.trans mleq))).2,ie3 q (m3le.trans mleq),
+        add_thirds (ε / (γ * ↑l))]
+    have ltt:0<γ*l:= by
+      apply mul_pos;linarith;linarith [alg.lpos]
+    calc
+      f (z (α q)).1=f (alg.x (α q)):= rfl
+      _=(γ * ↑l)*(1 / (γ * ↑l) * f (alg.x (α q))):= by
+        rw [←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul]
+      _<(γ * ↑l)*(1 / (γ * ↑l) * f z_.1 + ε / (γ * ↑l)):=(mul_lt_mul_left ltt).mpr key
+      _=f z_.1 + ε:=by
+        rw [mul_add,←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul,mul_div_cancel₀ _ (LT.lt.ne ltt).symm]
+  exact Eventually.and lef rig
+
+lemma gconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+    (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+    Tendsto (fun n ↦ g (alg.z (α n)).2) atTop (𝓝 (g z_.2)):=by
+  apply (nhds_basis_Ioo_pos (g z_.2)).tendsto_right_iff.mpr
+  rintro ε epos
+  simp only [Ioo]
+  have lef:∀ᶠ (x : ℕ) in atTop, g (alg.z (α x)).2>g z_.2-ε:= by
+    have semi: ∀ᶠ x' in 𝓝 z_.2, g z_.2 -ε < g x':= by
+      apply alg.hg z_.2
+      linarith
+    have :Tendsto (fun n↦ (alg.z (α n)).2) atTop (𝓝 z_.2):= Tendsto.snd_nhds conv
+    exact this semi
+  have rig:∀ᶠ (x : ℕ) in atTop, g (alg.z (α x)).2<g z_.2+ε:= by
+    have ieq (q:ℕ)(hq:1≤α q):alg.d (α q - 1) * g (alg.y (α q)) +⟪alg.y (α q) - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q)) (alg.y (α q - 1))⟫_ℝ≤
+        alg.d (α q - 1) * g z_.2 + ‖z_.2 - alg.y (α q - 1)‖ ^ 2 / 2 +⟪z_.2 - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q)) (alg.y (α q - 1))⟫_ℝ:= by
+      rcases isMinOn_iff.mp (alg.s₂ (α q -1)) z_.2 trivial with ieq
+      simp at ieq
+      rw [←sub_add,norm_add_sq_real,←sub_add,norm_add_sq_real] at ieq
+      repeat rw [add_div] at ieq
+      repeat rw [←add_assoc] at ieq
+      simp [hq] at ieq
+      have :0≤‖alg.y (α q) - alg.y (α q - 1)‖ ^ 2 / 2 := by
+        apply div_nonneg
+        norm_num
+        norm_num
+      linarith [ieq,this]
+    have Hbd :∃C,∀q:ℕ ,‖(grad_snd H (alg.x (α q )) (alg.y (α q -1)))‖≤C:= by
+      rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
+      have con11H:ContinuousOn (fun (x,y)↦grad_snd H x y) (Metric.closedBall (0:WithLp 2 (E×F)) (2*C1)) := by
+        apply Continuous.continuousOn
+        have :LipschitzWith l (fun (x,y)↦grad_snd H x y) := by
+          apply lipschitzWith_iff_norm_sub_le.mpr
+          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
+          simp
+          calc
+            ‖grad_snd H x1 y1 - grad_snd H x2 y2‖
+              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
+                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).right
+            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
+              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
+              rw [lipschitzWith_iff_norm_sub_le] at lip
+              specialize lip (x1,y1) (x2,y2)
+              simp [grad_fun_comp,grad_comp] at lip
+              -- exact lip
+              sorry
+        apply LipschitzWith.continuous this
+      rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) F _ _ _ (isCompact_closedBall (0:WithLp 2 (E×F)) (2*C1))
+        (fun (x,y)↦grad_snd H x y) con11H with ⟨C,sqsq⟩
+      use C
+      rintro q
+      have :(alg.x (α q ),alg.y (α q -1))∈Metric.closedBall (0:WithLp 2 (E×F)) (2*C1) := by
+        apply mem_closedBall_iff_norm.mpr
+        simp
+        calc
+          @norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α q),alg.y (α q - 1)) ≤‖alg.x (α q)‖+‖alg.y (α q - 1)‖:=by
+            apply tri
+          _≤‖alg.z (α q)‖+‖alg.z (α q -1)‖:=by
+            have :‖alg.y (α q -1)‖≤‖alg.z (α q -1)‖:= by
+              rw [WithLp.prod_norm_eq_of_L2]
+              apply (Real.le_sqrt (norm_nonneg (alg.y (α q -1) ))
+              (Left.add_nonneg (sq_nonneg ‖alg.x (α q - 1)‖)
+              (sq_nonneg ‖(alg.y (α q -1) )‖ ))).mpr
+              apply (le_add_of_nonneg_left (sq_nonneg ‖alg.x (α q - 1)‖))
+            have :‖alg.x (α q )‖≤‖alg.z (α q )‖:= by
+              rw [WithLp.prod_norm_eq_of_L2]
+              apply (Real.le_sqrt (norm_nonneg (alg.x (α q ) ))
+              (Left.add_nonneg (sq_nonneg ‖alg.x (α q )‖)
+              (sq_nonneg ‖(alg.y (α q ) )‖ ))).mpr
+              apply (le_add_of_nonneg_right (sq_nonneg ‖alg.y (α q )‖))
+            linarith
+          _≤C1+C1:=by
+            apply add_le_add
+            apply inin
+            exact mem_image_of_mem z trivial
+            apply inin
+            exact mem_image_of_mem z trivial
+          _=2*C1:=Eq.symm (two_mul C1)
+      have hhhh:= sqsq (alg.x (α q ),alg.y (α q -1)) this
+      simp at hhhh
+      exact hhhh
+    rcases Hbd with ⟨C,hbd⟩
+    have diflte1:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖alg.y (α q) - alg.y (α q - 1)‖ <ε:= by
+      intro ε epos
+      rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) ε epos with lte
+      simp at lte
+      rcases lte with ⟨a,ie⟩
+      simp
+      rcases final (a+1) monoa with ⟨A,iee⟩
+      use A
+      rintro b Aleb
+      have:Monotone α:= by exact StrictMono.monotone monoa
+      have a1leab:a+1≤ α b := by linarith [StrictMono.monotone monoa Aleb,iee]
+      have :a≤ α b -1:= by exact Nat.le_sub_one_of_lt a1leab
+      calc
+        ‖alg.y (α b) - alg.y (α b - 1)‖≤@norm (WithLp 2 (E × F)) (WithLp.instProdNorm 2 E F) (alg.x (α b) - alg.x (α b - 1),alg.y (α b) - alg.y (α b - 1)) :=by
+          rw [WithLp.prod_norm_eq_of_L2]
+          simp
+          refine (Real.le_sqrt (norm_nonneg (alg.y (α b) - alg.y (α b - 1)))
+            (Left.add_nonneg (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖)
+            (sq_nonneg ‖alg.y (α b) - alg.y (α b - 1)‖ ))).mpr
+            (le_add_of_nonneg_left (sq_nonneg ‖alg.x (α b) - alg.x (α b - 1)‖))
+        _=‖alg.z (α b) - alg.z (α b - 1)‖:= rfl
+        _<ε:= by
+          have: ‖z (α b - 1 + 1) - z (α b - 1)‖ < ε:=ie (α b - 1) this
+          have eqq:(α b - 1 + 1)=α b:= by
+            apply Nat.sub_add_cancel
+            linarith [a1leab]
+          rw [eqq] at this
+          assumption
+    have diflte2:∀ ε>0, ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q - 1)‖ <ε:= by
+      rintro ε epos
+      have : ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q )‖ <ε/2:= by
+        rcases (atTop_basis.tendsto_iff (@Metric.nhds_basis_ball _ _ z_)).mp conv (ε/2) (half_pos epos) with ⟨n1,_,ieq1⟩
+        simp [dist_eq_norm] at ieq1;simp
+        use n1
+        rintro b n1leb
+        calc
+          ‖z_.2 - alg.y (α b)‖≤‖z_ -z (α b)‖ :=by
+            rw [WithLp.prod_norm_eq_of_L2]
+            simp
+            refine (Real.le_sqrt (norm_nonneg (z_.2 - alg.y (α b)))
+              (Left.add_nonneg (sq_nonneg ‖z_.1 - alg.x (α b)‖)
+              (sq_nonneg ‖z_.2 - alg.y (α b)‖ ))).mpr
+              (le_add_of_nonneg_left (sq_nonneg ‖z_.1 - alg.x (α b)‖))
+          _<ε/2:=by
+            rw [norm_sub_rev]
+            exact ieq1 b n1leb
+      have :∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q )‖ <ε/2∧‖alg.y (α q) - alg.y (α q - 1)‖ <ε/2
+          := Eventually.and this (diflte1 (ε/2) (half_pos epos))
+      apply Eventually.mono this
+      rintro x ⟨h1,h2⟩
+      calc
+        ‖z_.2 - alg.y (α x - 1)‖=‖z_.2 - alg.y (α x )+(alg.y (α x) - alg.y (α x -1))‖:= by
+          simp
+        _≤‖z_.2 - alg.y (α x)‖+‖alg.y (α x) - alg.y (α x - 1)‖:= by
+          apply norm_add_le
+        _<ε/2+ε/2:= by linarith [h1,h2]
+        _=ε := by exact add_halves ε
+
+    have (k:ℕ→F)(defle:∀ ε > 0, ∀ᶠ (q : ℕ) in atTop, ‖k q‖ < ε):∀ ε>0, ∀ᶠ (q : ℕ) in atTop,abs
+        ⟪k q, alg.d (α q -1) • grad_snd H (alg.x (α q )) (alg.y (α q -1))⟫_ℝ≤ε:= by
+      rintro ε epos
+      simp at defle;simp
+      by_cases Cpos:0<C
+      · have :0<ε/(C/(γ*l)) := by
+          apply div_pos epos;apply div_pos Cpos;apply mul_pos _ alg.lpos;linarith
+        rcases defle (ε/(C/(γ*l))) this with ⟨nn,ieq⟩
+        use nn
+        rintro b nleb
+        rw [dk]
+        calc
+          |⟪k b, (1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _≤ε / (C / (γ * ↑l))*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            apply mul_le_mul (le_of_lt (ieq b nleb))
+            trivial
+            repeat apply norm_nonneg
+            apply le_of_lt;apply div_pos;apply epos;apply div_pos Cpos;apply mul_pos _ alg.lpos
+            linarith [hγ]
+          _=ε / (C / (γ * ↑l))*(1 / (γ * ↑l)) *‖ grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            rw [mul_assoc]
+            apply mul_eq_mul_left_iff.mpr
+            left
+            refine
+              norm_smul_of_nonneg ?h.ht (grad_snd H (alg.x (α b )) (alg.y (α b - 1)))
+            apply div_nonneg
+            norm_num;apply mul_nonneg
+            linarith [hγ];linarith [alg.lpos]
+          _=ε/C*‖ grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖:= by
+            apply mul_eq_mul_right_iff.mpr;left
+            rw [←div_mul,mul_assoc,mul_one_div,div_self,mul_one]
+            have :0<γ * ↑l:=by apply mul_pos _ alg.lpos;linarith
+            linarith
+          _≤ε/C*C:= by
+            apply mul_le_mul;trivial;apply hbd b;apply norm_nonneg
+            apply le_of_lt ;apply div_pos epos Cpos
+          _=ε:= by
+            refine div_mul_cancel₀ ε ?h;linarith [Cpos]
+      · push_neg at Cpos
+        use 100000
+        rintro b _
+        rw [dk]
+        calc
+          |⟪k b,  (1 / (γ * ↑l))• grad_snd H (alg.x (α b )) (alg.y (α b - 1))⟫_ℝ|
+            ≤‖k b‖*‖(1 / (γ * ↑l)) • grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              := by apply abs_real_inner_le_norm
+          _=‖k b‖*(1 / (γ * ↑l)) *‖grad_snd H (alg.x (α b )) (alg.y (α b - 1))‖
+              :=by
+              rw [mul_assoc]
+              apply mul_eq_mul_left_iff.mpr
+              left
+              refine
+              norm_smul_of_nonneg ?h.ht (grad_snd H (alg.x (α b )) (alg.y (α b - 1)))
+          _≤‖k b‖*(1 / (γ * ↑l))*C:= by
+            apply mul_le_mul
+            trivial;apply hbd b;apply norm_nonneg;apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤0:= by
+            apply mul_nonpos_iff.mpr
+            left
+            refine ⟨?_,Cpos⟩
+            apply mul_nonneg;apply norm_nonneg
+            apply div_nonneg;norm_num;apply mul_nonneg;linarith;linarith [alg.lpos]
+          _≤ε:= by linarith
+    simp only [dk] at ieq
+    have finalpos:0<ε/(γ*l)/3:= by
+      apply div_pos;apply div_pos epos;apply mul_pos;linarith;apply alg.lpos;linarith
+    have h1:∀ᶠ (q : ℕ) in atTop,|⟪alg.y (α q) - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H
+        (alg.x (α q )) (alg.y (α q - 1))⟫_ℝ| ≤ε / (γ * ↑l) / 3 :=
+      this (fun q↦alg.y (α q) - alg.y (α q - 1)) (diflte1) (ε/(γ*l)/3) finalpos
+    have h2: ∀ᶠ (q : ℕ) in atTop,|⟪z_.2 - alg.y (α q - 1), alg.d (α q - 1) • grad_snd H (alg.x (α q ))
+        (alg.y (α q - 1))⟫_ℝ| ≤ ε / (γ * ↑l) / 3:=
+      this (fun q↦z_.2 - alg.y (α q - 1)) diflte2 (ε/(γ*l)/3) finalpos
+    have h3: ∀ᶠ (q : ℕ) in atTop,‖z_.2 - alg.y (α q - 1)‖ ^ 2 / 2<(ε/(γ*l)/3):= by
+      refine Eventually.mono (diflte2 (√(2*(ε/(γ*l)/3))) ?_) ?_
+      apply Real.sqrt_pos_of_pos
+      apply mul_pos;norm_num;apply finalpos
+      intro x assx
+      have :‖z_.2 - alg.y (α x - 1)‖^2<(2*(ε/(γ*l)/3)):= by
+        refine (Real.lt_sqrt ?hy).mp ?_
+        apply norm_nonneg
+        exact assx
+      calc
+        ‖z_.2 - alg.y (α x - 1)‖ ^ 2 / 2<(2*(ε/(γ*l)/3))/2:= by
+          apply (div_lt_div_right _).mpr
+          apply this
+          linarith
+        _=(ε/(γ*l)/3):= by
+          apply mul_div_cancel_left₀
+          linarith
+    simp at h1 h2 h3
+    simp only [dk] at h1 h2 h3
+    simp
+    rcases h1 with ⟨m1,ie1⟩
+    rcases h2 with ⟨m2,ie2⟩
+    rcases h3 with ⟨m3,ie3⟩
+    use 1+max (max m1 m2) m3
+    intro q mleq
+    have m1le:m1≤1+max (max m1 m2) m3:=by linarith [(le_max_left m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m2le:m2≤1+max (max m1 m2) m3:= by linarith [(le_max_right m1 m2).trans (le_max_left (max m1 m2) m3)]
+    have m3le:m3≤1+max (max m1 m2) m3:= by linarith [le_max_right (max m1 m2) m3]
+    have :1≤α q := by
+      have :α 0 < α q:= by
+        apply monoa
+        linarith [Nat.le_of_add_right_le mleq]
+      linarith
+    have key:1 / (γ * ↑l) * g (alg.y (α q)) <1 / (γ * ↑l) * g z_.2 +ε / (γ * ↑l):= by
+      linarith [ieq q this,(abs_le.mp (ie1 q (m1le.trans mleq))).1,(abs_le.mp (ie2 q (m2le.trans mleq))).2,
+        ie3 q (m3le.trans mleq),add_thirds (ε / (γ * ↑l))]
+    have ltt:0<γ*l:= by
+      apply mul_pos;linarith;linarith [alg.lpos]
+    calc
+      g (z (α q)).2=g (alg.y (α q)):= rfl
+      _=(γ * ↑l)*(1 / (γ * ↑l) * g (alg.y (α q))):= by
+        rw [←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul]
+      _<(γ * ↑l)*(1 / (γ * ↑l) * g z_.2 + ε / (γ * ↑l)):=(mul_lt_mul_left ltt).mpr key
+      _=g z_.2 + ε:=by
+        rw [mul_add,←mul_assoc,mul_one_div_cancel (LT.lt.ne ltt).symm,one_mul,mul_div_cancel₀ _ (LT.lt.ne ltt).symm]
+  exact Eventually.and lef rig
+
+--the convergence of subseq implies the convergence of alg.ψ
+theorem psiconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_))
+  (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
+  Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
+      apply Tendsto.add
+      · apply Tendsto.add
+        · apply fconv γ hγ ck dk α z_ monoa conv bd lbdψ
+        · apply gconv γ hγ ck dk α z_ monoa conv bd lbdψ
+      exact (continuous_iff_seqContinuous.mp (ContDiff.continuous alg.conf)) conv
+
+#check  Ψ_subdiff_bound
+lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
     (limit_set alg.z).Nonempty ∧ ((limit_set alg.z) ⊆ critial_point alg.ψ) := by
   constructor
+  --nonempty
   have hz : ∀ (n : ℕ), alg.z n ∈ alg.z '' univ:= by intro n; use n; constructor; exact Set.mem_univ n; rfl
   have : ∃ a ∈ closure (alg.z '' univ), ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds a):=
     tendsto_subseq_of_bounded (bd) (hz)
@@ -690,227 +1170,402 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
   have h_t : (BCD.z (φ n)) ∈ t := hN n hn
   have h_s : (BCD.z (φ n)) ∈ s := t_s h_t
   exact h_s
-  --至此，非空证明完毕，下面开始证明更强的结论limit_set BCD.z ⊆ critial_point BCD.ψ
-  intro a ha
-  have ha': MapClusterPt a atTop alg.z :=ha
+  --the folllowing shows that limit_set BCD.z ⊆ critial_point BCD.ψ
+  intro z_ ha
+  have ha': MapClusterPt z_ atTop alg.z :=ha
 
-  have: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto ((alg.z) ∘ φ) Filter.atTop (nhds a) :=
+  have: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto ((alg.z) ∘ φ) Filter.atTop (nhds z_) :=
     TopologicalSpace.FirstCountableTopology.tendsto_subseq ha'
-  rcases this with ⟨φ,Monoφ,convergentφ⟩
-  have hH := convergentφ
-  simp [BCD.z, Function.comp] at hH
-  have htendx: Filter.Tendsto (alg.x ∘ φ) Filter.atTop (nhds a.1) := by
-    have tendH:= Filter.Tendsto.fst_nhds hH
-    have:(∀ n:ℕ ,((WithLp.equiv 2 (E × F)).symm (alg.x (φ n),alg.y (φ n))).1 =(alg.x (φ n), alg.y (φ n)).1):=by
-      intro n
-      exact WithLp.equiv_symm_fst (alg.x (φ n), alg.y (φ n))
-    have:(fun a ↦ ((WithLp.equiv 2 (E × F)).symm (alg.x (φ a), alg.y (φ a))).1) = (fun a => (alg.x (φ a), alg.y (φ a)).1):=by
-      ext n
-      exact this n
-    rw[this] at tendH
-    exact tendH
-  have htendy: Filter.Tendsto (alg.y ∘ φ) Filter.atTop (nhds a.2) := by
-    have tendH:= Filter.Tendsto.snd_nhds hH
-    have:(∀ n:ℕ ,((WithLp.equiv 2 (E × F)).symm (alg.x (φ n),alg.y (φ n))).2 =(alg.x (φ n), alg.y (φ n)).2):=by
-      intro n
-      exact WithLp.equiv_symm_snd (alg.x (φ n), alg.y (φ n))
-    have:(fun a ↦ ((WithLp.equiv 2 (E × F)).symm (alg.x (φ a), alg.y (φ a))).2) = (fun a => (alg.x (φ a), alg.y (φ a)).2):=by
-      ext n
-      exact this n
-    rw[this] at tendH
-    exact tendH
-  have lower_x: f (a.1) ≤ Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop := by
-    have key : Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop = Filter.liminf f (Filter.map (alg.x ∘ φ) Filter.atTop):=
-      Filter.liminf_comp _ _ _
-    --利用适当函数性质，去证这个(f ∘ (alg.x ∘ φ))必将大于f (a.1)，因为(alg.x ∘ φ)收敛到a.1
-    sorry
-  have lower_y: g (a.2) ≤ Filter.liminf (g ∘ (alg.y ∘ φ)) Filter.atTop := by
-    --同样利用适当函数的性质，这个过程是同上的
-    sorry
-  --上面主要是证明左不等号，拿x来说就是f (a.1) ≤ Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop
-  --下面需要证明反不等号也即是Filter.liminf (f ∘ (alg.x ∘ φ)) Filter.atTop≤f (a.1)
-  --这样可以得到等号，即可完成证明
+  rcases this with ⟨φ,monoφ,conv⟩
 
-  --下面这个不等式主要利用x的迭代公式
-  have a_1_le_x :∀ k:ℕ ,((inner (alg.x (k+1)-alg.x k) (grad_fst H (alg.y k) (alg.x k)))+((2/(alg.c k))*(‖alg.x (k+1)-alg.x k‖^2))
-      +(f (alg.x (k+1)))≤(inner (a.1-alg.x k) (grad_fst H (alg.y k) (alg.x k)))+((2/(alg.c k))*(‖a.1-alg.x k‖^2))+(f (a.1))) :=
-    by
-      intro k
-      have := alg.s₁
-      simp[prox_prop] at this
-      specialize this k
-      rw[isMinOn_iff] at this
-      specialize this a.1
-      have a1_univ : a.1 ∈ univ:= trivial
-      have:= this a1_univ
-      have le_1:(alg.c k * f (alg.x (k + 1)) + ‖alg.x (k + 1) - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖ ^ 2 / 2) /
-          alg.c k ≤(alg.c k * f a.1 + ‖a.1 - (alg.x k - alg.c k • grad_fst H (alg.y k) (alg.x k))‖ ^ 2 / 2) / alg.c k:=
-        div_le_div_of_nonneg_right this (le_of_lt sorry)
-      ring_nf at le_1
-      rw[mul_comm,<-mul_assoc] at le_1
-      ring_nf at le_1
-      rw[mul_inv_cancel,one_mul,one_mul] at le_1
-      ring
-      sorry
-      exact (ne_of_gt sorry)
-  --下面两个大have利用上面不等式去证明反不等号
-  have x_sup_le:Filter.limsup (f ∘ (alg.x ∘ φ)) Filter.atTop ≤ Filter.limsup (fun q =>(inner (a.1-(alg.x ∘ φ) (q-1))
-      (grad_fst H ((alg.y∘φ) (q-1)) ((alg.x∘ φ ) (q-1))))+((2/((alg.c ∘ φ) (q-1)))*
-      (‖a.1-(alg.x∘φ) (q-1)‖^2))+(f (a.1))) Filter.atTop :=
-    by
-    have argmin_le_x:∀ q:ℕ ,(inner ((alg.x ∘ φ) q -(alg.x ∘ φ) (q-1)) (grad_fst H ((alg.y ∘ φ) (q-1))
-        ((alg.x∘φ) (q-1)))+((2/((alg.c ∘ φ) (q-1)))*(‖((alg.x ∘ φ) (q))-((alg.x∘φ) (q-1))‖^2))+(f ((alg.x ∘ φ) (q)))
-        ≤(inner (a.1-(alg.x ∘ φ) (q-1)) (grad_fst H ((alg.y∘φ) (q-1)) ((alg.x∘ φ ) (q-1))))+((2/((alg.c ∘ φ) (q-1)))
-        *(‖a.1-(alg.x∘φ) (q-1)‖^2))+(f (a.1)) ):=
-      by sorry
-    sorry
-  have subφ_xconvergent: Tendsto (f ∘ (alg.x ∘ φ)) atTop (nhds (f (a.1))):=
-    by
-    have sup_x_le:Filter.limsup (f ∘ (alg.x ∘ φ)) Filter.atTop ≤ f (a.1):=
-      by sorry
-    sorry
-
-  --x的部分已然证明，下面去证明y的部分，这个部分与x是一致对称的
-  have a_2_le_y :∀ k:ℕ ,(inner (alg.y (k+1)-alg.y k) (grad_snd H (alg.x k) (alg.y k)))+((2/(alg.d k))*
-      (‖alg.y (k+1)-alg.y k‖^2))+(g (alg.y (k+1)))≤(inner (a.2-alg.y k) (grad_snd H (alg.x k) (alg.y k)))
-      +((2/(alg.d k))*(‖a.2-alg.y k‖^2))+(g (a.2)) :=
-    by
-      intro k
-      have := alg.s₂
-      simp[prox_prop] at this
-      specialize this k
-      rw[isMinOn_iff] at this
-      specialize this a.2
-      have a2_univ : a.2 ∈ univ:= trivial
-      have:= this a2_univ
-      have le_2:(alg.d k * g (alg.y (k + 1)) + ‖alg.y (k + 1) - (alg.y k - alg.d k • grad_snd H
-        (alg.x (k+1)) (alg.y k))‖ ^ 2 / 2) /alg.d k ≤(alg.d k * g a.2 + ‖a.2 - (alg.y k - alg.d k •
-        grad_snd H (alg.x (k+1)) (alg.y k))‖ ^ 2 / 2) / alg.d k:=div_le_div_of_nonneg_right this (le_of_lt sorry)
-      ring_nf at le_2
-      rw[mul_comm,<-mul_assoc] at le_2
-      ring_nf at le_2
-      rw[mul_inv_cancel,one_mul,one_mul] at le_2
-      ring_nf
-      sorry
-      exact (ne_of_gt sorry)
-  --这个部分也与x部分一致，定理的名称是对称的
-  have y_sup_le:Filter.limsup (g ∘ (alg.y ∘ φ)) Filter.atTop ≤ Filter.limsup (fun q =>(inner (a.2-(alg.y ∘ φ) (q-1))
-      (grad_snd H ((alg.x∘φ) (q)) ((alg.y∘ φ ) (q-1))))+((2/((alg.d ∘ φ) (q-1)))
-      *(‖a.2-(alg.y∘φ) (q-1)‖^2))+(g (a.2))) Filter.atTop :=
-    by
-    have argmin_le_y:∀ q:ℕ ,(inner ((alg.y ∘ φ) q -(alg.y ∘ φ) (q-1)) (grad_snd H ((alg.x ∘ φ) q)
-        ((alg.y∘φ) (q-1)))+((2/((alg.d ∘ φ) (q-1)))*(‖((alg.y ∘ φ) (q))-((alg.y∘φ) (q-1))‖^2))+
-        (g ((alg.y ∘ φ) (q)))≤(inner (a.2-(alg.y ∘ φ) (q-1)) (grad_snd H ((alg.x∘φ) (q)) ((alg.y∘ φ ) (q-1))))
-        +((2/((alg.d ∘ φ) (q-1)))*(‖a.2-(alg.y∘φ) (q-1)‖^2))+(g (a.2)) ):=
-      by sorry
-    sorry
-  have subφ_yconvergent: Tendsto (g ∘ (alg.y ∘ φ)) atTop (nhds (g (a.2))):=
-    by
-    have sup_y_le:Filter.limsup (g ∘ (alg.y ∘ φ)) Filter.atTop ≤ g (a.2):=
-      by sorry
-    sorry
-  --x，y部分都证明完等式之后，直接利用定义去证我们需要的结论
-  have zero_in_partial:(0,0)∈ subdifferential alg.ψ (a.1,a.2) :=
-    by
-    have sub_convergent : Tendsto (fun q => alg.ψ (((alg.x∘ φ) q),((alg.y ∘ φ) q))) Filter.atTop (nhds (alg.ψ ((a.1),(a.2)))) :=
-      by sorry
-    have A_in_partial: ∀ q:ℕ ,(((alg.A_kx ∘ φ) q),((alg.A_ky ∘ φ) q)) ∈ f_subdifferential alg.ψ ((alg.x ∘ φ) q,(alg.y ∘ φ) q) :=
-      by sorry
-    have A_convergent: Tendsto (fun q=>(((alg.A_kx ∘ φ) q),((alg.A_ky ∘ φ) q))) Filter.atTop (nhds (0,0)) :=
-      by sorry
-    sorry
+  have zero_in_partial:0∈ subdifferential alg.ψ z_ :=by
+    rw [subdifferential,Set.mem_setOf]
+    use fun n ↦ alg.z (φ (n+1))
+    constructor
+    exact (tendsto_add_atTop_iff_nat 1).mpr conv
+    constructor
+    exact (tendsto_add_atTop_iff_nat 1).mpr (psiconv γ hγ ck dk φ z_ monoφ conv bd lbdψ)
+    rcases Ψ_subdiff_bound γ hγ ck dk with ⟨ρ,ρpos,ieq⟩
+    let v:=fun q↦Classical.choose (ieq (φ (q+1) -1))
+    use v
+    intro n
+    have (q:ℕ):1≤φ (q+1):= (Nat.le_add_left 1 q).trans (StrictMono_nat φ monoφ (q+1))
+    have key (q:ℕ):v q ∈ f_subdifferential alg.ψ (alg.x (φ (q+1) -1 + 1), alg.y (φ (q+1) -1 + 1))
+      ∧‖v q‖ ≤ ρ * ‖alg.z (φ (q+1) -1 + 1) - alg.z (φ (q+1) -1)‖:=by
+      simp [v]
+      apply Classical.choose_spec (ieq (φ (q+1) -1))
+    have subadd(q:ℕ):φ (q+1) -1 +1=φ (q+1):= by exact Nat.sub_add_cancel (this (sorryAx ℕ true))
+    simp [subadd] at key
+    constructor
+    · exact (key n).1
+    apply tendsto_zero_iff_norm_tendsto_zero.mpr
+    apply (nhds_basis_Ioo_pos 0).tendsto_right_iff.mpr
+    rintro ε epos
+    simp
+    rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ)
+      (ε/ρ) (div_pos epos ρpos) with lte
+    simp at lte
+    rcases lte with ⟨a,ieq⟩
+    use a
+    rintro b aleb
+    constructor
+    linarith [norm_nonneg (v b),epos]
+    calc
+      ‖v b‖≤ρ * ‖z (φ (b + 1)) - z (φ (b + 1) - 1)‖:= (key b).2
+      _<ρ*(ε/ρ):=by
+        apply (mul_lt_mul_left ρpos).mpr
+        have :‖alg.z (φ (b + 1)-1+1) - alg.z (φ (b + 1) - 1)‖ < ε / ρ:=by
+          apply ieq
+          apply aleb.trans
+          calc
+            b=b+1-1:= by exact rfl
+            _≤φ (b+1)-1:= Nat.sub_le_sub_right (StrictMono_nat φ monoφ (b+1)) 1
+        simp [subadd b] at this
+        exact this
+      _=ε:=by
+        rw [mul_comm]
+        apply div_mul_cancel₀
+        linarith [ρpos]
   apply Set.mem_setOf.mpr
   exact zero_in_partial
 
-lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ)):
+
+lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : BddBelow (alg.ψ '' univ)):
     Tendsto (fun n ↦ (EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal) atTop (𝓝 0) := by
-  have : ∃ za ∈limit_set alg.z, ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds za) := by
-    unfold limit_set
-    --rw[Set.mem_setOf] at za_limit_set
-    --have:=TopologicalSpace.FirstCountableTopology.tendsto_subseq za_limit_set
-    --rcases this with ⟨φ,⟨StrictMono_φ,Filter.Tendsto_φ⟩⟩
-    --use φ
-    sorry
-  rcases this with ⟨za, za_limit_set, φ, ⟨StrictMono_φ, Filter.Tendsto_φ⟩⟩
-  --下面这个have是三角不等式
-  have: ∀n:ℕ ,∀q:ℕ,(EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal ≤ (EMetric.infEdist
-      ((alg.z ∘ φ) q) (limit_set alg.z)).toReal + (∑ (x ∈ Finset.Icc n q), (fun c =>‖alg.z (c-1)-alg.z c‖) x):=
-    by
-      sorry
-  --下面一个have结论需要使用到充分下降原理，类似cauthy定理那样，去证明邻项也趋于同一个极限，从而完成证明
-  have: Tendsto (fun n ↦ (EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal) atTop (𝓝 0) :=
-    by sorry
-  exact this
+  apply (nhds_basis_Ioo_pos 0).tendsto_right_iff.mpr
+  rintro ε epos
+  by_contra h
+  simp at h
+  --alg.z∘W is the subseq s.t. the dist is no less than ε
+  let W:ℕ → ℕ:=fun n ↦
+    Nat.recOn n (Classical.choose (h 0))
+    fun n p ↦ (Classical.choose (h (p+1)))
+  have monoW:StrictMono W:=by
+    have (n:ℕ):W n+1≤W (n+1):=(Classical.choose_spec (h (W n +1))).1
+    have (n:ℕ):W n<W (n+1):= this n
+    apply strictMono_nat_of_lt_succ this
+  have bd':Bornology.IsBounded (alg.z∘W '' univ):=by
+    apply bd.subset
+    intro k;simp
+    exact fun x zk ↦ ⟨W x,zk⟩
+  have :∃ z_∈ closure (alg.z∘W '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ (alg.z∘W) (α n)) atTop (𝓝 z_):= by
+    have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
+      apply IsCompact.isSeqCompact
+      exact bd'.isCompact_closure
+    have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx
+      (∃ᶠ (n : ℕ) in atTop, (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
+    apply hcs.subseq_of_frequently_in even
+  rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
+  have z_in : z_ ∈ limit_set alg.z:= by
+    simp [limit_set, MapClusterPt]
+    apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
+    calc
+      _ = map (fun n ↦ (alg.z∘W) n) (map α atTop) := by
+        rw [map_map]
+        rfl
+      _ ≤ map (fun n↦ (alg.z∘W) n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
+      _ ≤ map (fun n↦ alg.z n) atTop:= by
+        rw [←map_map]
+        apply map_mono (StrictMono.tendsto_atTop monoW)
+  --show the contradiction
+  have z_0:(EMetric.infEdist (z_) (limit_set alg.z)).toReal=0:= by
+    have :(EMetric.infEdist (z_) (limit_set alg.z))=0:=EMetric.infEdist_zero_of_mem z_in
+    refine (ENNReal.toReal_eq_zero_iff _).mpr ?_
+    left;exact this
+  have z_ge:(EMetric.infEdist (z_) (limit_set alg.z)).toReal≥ε:=by
+    have :Tendsto (fun n ↦(EMetric.infEdist ((alg.z∘W) (α n)) (limit_set alg.z)).toReal)
+      atTop (𝓝 (EMetric.infEdist (z_) (limit_set alg.z)).toReal):=
+      continuous_iff_seqContinuous.mp (Metric.continuous_infDist_pt (limit_set z)) conv
+    apply ge_of_tendsto this
+    simp
+    use 1
+    rintro n len
+    have key:ε≤(EMetric.infEdist ((alg.z ∘ W) (α n -1 +1)) (limit_set alg.z)).toReal:=by
+      apply (Classical.choose_spec (h (W (α n -1) +1))).2
+      calc
+        -ε<0:=by linarith
+        _≤(EMetric.infEdist (alg.z (Classical.choose (h (W (α n -1) +1)))) (limit_set alg.z)).toReal:=by
+          exact ENNReal.toReal_nonneg
+    have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+    rw [←this]
+    exact key
+  linarith
 
-lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ)):
+lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : BddBelow (alg.ψ '' univ)):
     IsCompact (limit_set alg.z) ∧ IsConnected (limit_set alg.z) := by
+  have com:IsCompact (limit_set alg.z):=by
+    apply Metric.isCompact_of_isClosed_isBounded
+    apply isClosed_setOf_clusterPt
+    apply isBounded_iff_forall_norm_le.mpr
+    rcases isBounded_iff_forall_norm_le.mp bd with ⟨C,zin⟩
+    use C
+    rintro z_ z_in
+    rcases subseq_tendsto_of_neBot z_in with ⟨φ,⟨monoφ,conv⟩⟩
+    apply le_of_tendsto'
+      (Tendsto.norm conv) (fun n↦zin (alg.z (φ n)) (mem_image_of_mem alg.z (mem_univ (φ n))) )
   constructor
-  let set_le :ℕ -> Set ℕ := (fun k => {x | k≤ x})
-  let Z:ℕ -> Set (WithLp 2 (E × F)) := (fun k => closure (⋃ (q∈ (set_le q)),{alg.z q}))
-  --下面这个have是关键，正是注意到limit_set alg.z的这种表达形式，才可完成证明
-  have: (limit_set alg.z) = (⨅ q ∈ (Set.Ioi 0), Z q) :=
-    by sorry
-  --每个zk都是紧集
-  have compact_zk:∀ k:ℕ,IsCompact (Z k) :=by
-    intro k
-    apply Metric.isCompact_iff_isClosed_bounded.mpr
-    sorry
-  --利用代数性质即可证明结论
-  have:IsCompact (limit_set alg.z):=by
-    sorry
-  exact this
-
-  --紧集证明完毕，还需要证明连通，此处利用反证法
+  exact com
+  --the following is the proof of connectivity
   have:IsConnected (limit_set alg.z)<->((limit_set alg.z).Nonempty ∧ IsPreconnected (limit_set alg.z)):= by rfl
   rw[this]
   constructor
-  exact (limitset_property_1 (bd)).1
-  have : IsPreconnected (limit_set alg.z) =   ∀ (u v : Set (WithLp 2 (E × F))), IsOpen u
-      → IsOpen v → (limit_set alg.z) ⊆ u ∪ v → ((limit_set alg.z) ∩ u).Nonempty →
-      ((limit_set alg.z) ∩ v).Nonempty → ((limit_set alg.z) ∩ (u ∩ v)).Nonempty:=by rfl
-  rw[this]
-  --上面都是些准备工作，下面利用反证法去证明结论
+  exact (limitset_property_1 γ hγ ck dk bd lbdψ).1
+  rw [isPreconnected_closed_iff]
+  --construct closed A,B such that A∩B=∅,A∪B=limit_set
   by_contra nonconnect
   push_neg at nonconnect
-  rcases nonconnect with ⟨A,B,openA,openB,sub_AB,nez_A,nez_B,nz_AB⟩
-  let γ : (E × F) -> ℝ := fun z => ((EMetric.infEdist z A).toReal) /
+  rcases nonconnect with ⟨a,b,closea,closeb,sub_ab,nez_a,nez_b,nz_ab⟩
+  let A:=(limit_set alg.z)∩a
+  let B:=(limit_set alg.z)∩b
+  have closeA:IsClosed A:=IsClosed.inter (isClosed_setOf_clusterPt) closea
+  have closeB:IsClosed B:=IsClosed.inter (isClosed_setOf_clusterPt) closeb
+  have noneptA:A.Nonempty:=nez_a
+  have noneptB:B.Nonempty:=nez_b
+  have eqAB:A∪B=(limit_set alg.z):=by
+    simp [A,B]
+    calc
+      (limit_set z∩a) ∪ ( limit_set z∩ b) =  limit_set z∩(a∪b):=
+        (inter_union_distrib_left (limit_set z) a b).symm
+      _=limit_set z:= (left_eq_inter.mpr sub_ab).symm
+  have disjoint_AB:A∩B=∅:= by
+    simp [A,B]
+    calc
+      limit_set z ∩ a ∩ (limit_set z ∩ b)=limit_set z ∩ (a∩b):=
+        (inter_inter_distrib_left (limit_set z) a b).symm
+      _=∅:=nz_ab
+  --ω is a function that shows the relation between z and A,B
+  let ω : WithLp 2 (E × F) -> ℝ := fun z => ((EMetric.infEdist z A).toReal) /
     ((EMetric.infEdist z A).toReal+(EMetric.infEdist z B).toReal)
-  --这里γ是一个距离定义的函数，而距离连续，从而容易知道其连续，正如下面这个have所说的。
-  have : Continuous γ := by sorry
-  --A,B分别是连续函数γ在0，1下的完全原象
-  have A_eq: A = Set.preimage γ ({0}) := by sorry
-  have B_eq: B = Set.preimage γ ({1}) := by sorry
-  let U : Set (E × F) := {z:(E × F)|(γ z)<(1/4)}
-  let V : Set (E × F) := {z:(E × F)|(3/4)<(γ z)}
-  --alg.z 终将落到U或者V中
+  have sum_ne_zero:∀ z ,(EMetric.infEdist z A).toReal+(EMetric.infEdist z B).toReal≠0:= by
+    intro z eq0
+    have inA:z∈A:=by
+      apply EMetric.mem_closure_iff_infEdist_zero.mpr
+      show EMetric.infEdist z A=0
+      have net:EMetric.infEdist z A≠⊤:=by
+        exact Metric.infEdist_ne_top nez_a
+      have :(EMetric.infEdist z A).toReal=0:=by
+        linarith [eq0,@ENNReal.toReal_nonneg (EMetric.infEdist z A),@ENNReal.toReal_nonneg (EMetric.infEdist z B)]
+      exact (((fun {x y} hx hy ↦ (ENNReal.toReal_eq_toReal_iff' hx hy).mp)
+          ENNReal.top_ne_zero.symm net (id (Eq.symm this)))).symm
+      simp;constructor;apply closeA;exact fun ⦃a⦄ a ↦ a
+    have inB:z∈B:=by
+      apply EMetric.mem_closure_iff_infEdist_zero.mpr
+      show EMetric.infEdist z B=0
+      have net:EMetric.infEdist z B≠⊤:=by
+        exact Metric.infEdist_ne_top nez_b
+      have :(EMetric.infEdist z B).toReal=0:=by
+        linarith [eq0,@ENNReal.toReal_nonneg (EMetric.infEdist z A),@ENNReal.toReal_nonneg (EMetric.infEdist z B)]
+      exact (((fun {x y} hx hy ↦ (ENNReal.toReal_eq_toReal_iff' hx hy).mp)
+          ENNReal.top_ne_zero.symm net (id (Eq.symm this)))).symm
+      simp;constructor;apply closeB;exact fun ⦃a⦄ a ↦ a
+    have :z∈A∩B:=mem_inter inA inB
+    rw [disjoint_AB] at this
+    contradiction
+  have contω: Continuous ω := by
+    apply Continuous.div
+    exact Metric.continuous_infDist_pt A
+    apply Continuous.add (Metric.continuous_infDist_pt A) (Metric.continuous_infDist_pt B)
+    apply sum_ne_zero
+  let U := {z:WithLp 2 (E × F)|(ω z)<(1/4)}
+  let V := {z:WithLp 2 (E × F)|(3/4)<(ω z)}
+  have A0:∀ z_∈A,ω z_ =0:= by
+    rintro z_ zA
+    rw [div_eq_zero_iff]
+    left
+    have :EMetric.infEdist z_ A=0:=by
+      apply EMetric.infEdist_zero_of_mem zA
+    rw [this];rfl
+  have B1:∀z_∈ B,ω z_ =1:= by
+    rintro z_ zB
+    simp [ω]
+    apply (div_eq_one_iff_eq (sum_ne_zero z_)).mpr
+    simp
+    have :EMetric.infEdist z_ B=0:=by
+      apply EMetric.infEdist_zero_of_mem zB
+    rw [this];rfl
+  --eventually alg.z falls in U or V
   have U_V_prop:∃ k0:ℕ,∀ k:ℕ, (k0 ≤ k) -> (alg.z k ∈ U) ∨ (alg.z k ∈ V) := by
-    by_contra h_contra
-    sorry
+    by_contra h
+    push_neg at h
+    let W:ℕ→ℕ:=fun n↦
+      Nat.recOn n (Classical.choose (h 0))
+      fun n p ↦ (Classical.choose (h (p+1)))
+    have monoW:StrictMono W:=by
+      have (n:ℕ):W n+1≤W (n+1):=(Classical.choose_spec (h (W n +1))).1
+      have (n:ℕ):W n<W (n+1):= this n
+      apply strictMono_nat_of_lt_succ this
+    have bd':Bornology.IsBounded (alg.z∘W '' univ):=by
+      apply bd.subset
+      intro k;simp
+      exact fun x zk ↦ ⟨W x,zk⟩
+    have :∃ z_∈ closure (alg.z∘W '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ (alg.z∘W) (α n)) atTop (𝓝 z_):= by
+      have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
+        apply IsCompact.isSeqCompact
+        exact bd'.isCompact_closure
+      have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
+        (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
+      apply hcs.subseq_of_frequently_in even
+    rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
+    have z_in : z_ ∈ limit_set alg.z:= by
+      simp [limit_set, MapClusterPt]
+      apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
+      calc
+        _ = map (fun n ↦ (alg.z∘W) n) (map α atTop) := by
+          rw [map_map]
+          rfl
+        _ ≤ map (fun n↦ (alg.z∘W) n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
+        _ ≤ map (fun n↦ alg.z n) atTop:= by
+          rw [←map_map]
+          apply map_mono (StrictMono.tendsto_atTop monoW)
+    rw [←eqAB] at z_in
+    rcases z_in with zA | zB
+    · have :ω z_ =0:= A0 z_ zA
+      have z_ge:ω z_≥1/4:=by
+        have :Tendsto (fun n ↦(ω ((alg.z∘W∘α)  n)) ) atTop (𝓝 (ω z_)):=
+          continuous_iff_seqContinuous.mp (contω) conv
+        apply ge_of_tendsto this
+        simp
+        use 1
+        rintro n len
+        have key:1/4≤ω ((alg.z ∘ W) (α n -1 +1)) :=by
+          have :(alg.z ∘ W) (α n -1 +1)∉U:= (Classical.choose_spec (h (W (α n -1) +1))).2.1
+          rw [Set.mem_setOf] at this
+          push_neg at this;exact this
+        have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+        rw [←this]
+        simp at key;exact key
+      linarith
+    · have :ω z_ =1:= B1 z_ zB
+      have z_ge:ω z_≤3/4:=by
+        have :Tendsto (fun n ↦(ω ((alg.z∘W∘α)  n)) ) atTop (𝓝 (ω z_)):=
+          continuous_iff_seqContinuous.mp (contω) conv
+        apply le_of_tendsto this
+        simp
+        use 1
+        rintro n len
+        have key:ω ((alg.z ∘ W) (α n -1 +1))≤3/4 :=by
+          have :(alg.z ∘ W) (α n -1 +1)∉V:= (Classical.choose_spec (h (W (α n -1) +1))).2.2
+          rw [Set.mem_setOf] at this
+          push_neg at this;exact this
+        have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+        rw [←this]
+        simp at key;exact key
+      linarith
   rcases U_V_prop with ⟨k0,hk0⟩
-  let r : ℕ ->ℝ := fun k => (γ ∘ alg.z) k
-  have r_prop:(∀ k:ℕ ,(k0≤k) -> (r k) ∉ (Set.Icc (1/4) (3/4))) ∧ Infinite ({k:ℕ | r k < 1/4})
-      ∧ Infinite ({k:ℕ | 3/4 < r k}) ∧ Tendsto (fun k => |r (k+1)-r k|) Filter.atTop (nhds 0) :=
-    by sorry
-  --下面就可以引入矛盾，因为由于充分下降，zk与zk+1终将无限接近
-  --但是上面这个r表明，将会有无限的r k分别小于1/4与大于3/4，这显然矛盾，这正是下面这个sorry的内容
-  sorry
+  --eventually alg.z falls into the same U or V
+  have unicont:UniformContinuousOn ω (closure (alg.z '' univ)):=IsCompact.uniformContinuousOn_of_continuous
+    bd.isCompact_closure contω.continuousOn
+  have :∀ε>0,∃ δ>0,∀ x1∈(closure (alg.z '' univ)), ∀x2∈(closure (alg.z '' univ)),‖x1-x2‖<δ → ‖ω x1 -ω x2‖<ε:=by
+    have h:= (((@NormedAddCommGroup.uniformity_basis_dist (WithLp 2 (E×F)) _).inf
+    (hasBasis_principal ((closure (alg.z '' univ)) ×ˢ(closure (alg.z '' univ))))).tendsto_iff
+    (@NormedAddCommGroup.uniformity_basis_dist ℝ _) ).mp unicont
+    simp at h
+    rw [Eq.symm image_univ ] at h
+    rintro ε epos
+    rcases h ε epos with ⟨δ,⟨dpos,ieq⟩⟩
+    exact ⟨δ,⟨dpos,fun x1 x1s x2 x2s dis↦ieq x1 x2 dis x1s x2s⟩⟩
+  have :∀ε>0,∃ N,∀n≥N,‖ω (alg.z (n+1))-ω (alg.z n)‖<ε:=by
+    rintro ε epos
+    rcases this ε epos with ⟨δ,dpos,ieq⟩
+    rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) δ dpos with lte
+    simp at lte
+    rcases lte with ⟨a,ie⟩
+    use a;rintro n alen
+    apply ieq
+    apply subset_closure (mem_image_of_mem z (mem_univ (n+1)))
+    apply subset_closure (mem_image_of_mem z (mem_univ (n)))
+    apply ie n alen
+  rcases this (1/2) one_half_pos with ⟨N,key⟩
+  have :∃M,(∀n≥M,alg.z n ∈ U)∨(∀n≥M,alg.z n ∈ V):= by
+    let M:= max k0 N
+    use M
+    rcases hk0 M (Nat.le_max_left k0 N) with MU|MV
+    left
+    have (n:ℕ):alg.z (M+n)∈U:= by
+      induction' n with n ih
+      · exact MU
+      rcases hk0 (M+n+1) ((Nat.le_max_left k0 N).trans (Nat.le_add_right M (n + 1))) with nU|nV
+      exact nU
+      rw [mem_setOf] at ih nV
+      linarith [(abs_lt.mp (key (M+n) ((Nat.le_max_right k0 N).trans (Nat.le_add_right M (n))))).2,ih,nV]
+    rintro n Mlen
+    rw [←Nat.add_sub_of_le Mlen];apply this (n - M)
+    right
+    have (n:ℕ):alg.z (M+n)∈V:= by
+      induction' n with n ih
+      · exact MV
+      rcases hk0 (M+n+1) ((Nat.le_max_left k0 N).trans (Nat.le_add_right M (n + 1))) with nU|nV
+      rw [mem_setOf] at ih nU
+      linarith [(abs_lt.mp (key (M+n) ((Nat.le_max_right k0 N).trans (Nat.le_add_right M (n))))).1,ih,nU]
+      exact nV
+    rintro n Mlen
+    rw [←Nat.add_sub_of_le Mlen];apply this (n - M)
+  --show the contradiction
+  rcases this with ⟨M,h1|h2⟩
+  · rcases noneptB with ⟨z_,inB⟩
+    have :z_∈limit_set alg.z:= mem_of_mem_inter_left inB
+    have : ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_) :=by
+      exact subseq_tendsto_of_neBot this
+    rcases this with ⟨φ,monoφ,conv⟩
+    have :ω z_≤1/4:= by
+      apply le_of_tendsto (continuous_iff_seqContinuous.mp (contω) conv)
+      simp
+      use M
+      rintro b Mleb
+      have g:= h1 (φ b) (Mleb.trans (StrictMono_nat φ monoφ b))
+      rw [mem_setOf] at g
+      simp at g
+      apply le_of_lt g
+    linarith [this,B1 z_ inB]
+  · rcases noneptA with ⟨z_,inA⟩
+    have :z_∈limit_set alg.z:= mem_of_mem_inter_left inA
+    have : ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_) :=by
+      exact subseq_tendsto_of_neBot this
+    rcases this with ⟨φ,monoφ,conv⟩
+    have :ω z_≥3/4:= by
+      apply ge_of_tendsto (continuous_iff_seqContinuous.mp (contω) conv)
+      simp
+      use M
+      rintro b Mleb
+      have g:= h2 (φ b) (Mleb.trans (StrictMono_nat φ monoφ b))
+      rw [mem_setOf] at g
+      apply le_of_lt g
+    linarith [this,A0 z_ inA]
 
-lemma limitset_property_4 (bd : Bornology.IsBounded (alg.z '' univ)):
+
+lemma limitset_property_4 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃ (c:ℝ) , ∀ x ∈ (limit_set alg.z) , alg.ψ x = c := by
-  --下面这个have主要是充分下降中的定理，其中告诉我们这么个定理
-  --alg.ψ必将收敛到一个（局部极小）值
-  have decent_ψ:∃ ψ_final, Tendsto (alg.ψ ∘ alg.z) Filter.atTop (nhds ψ_final) :=
-    by sorry
+  --alg.ψ converges to same ψ_final
+  have decent_ψ:∃ ψ_final, Tendsto (alg.ψ ∘ alg.z) Filter.atTop (nhds ψ_final) :=by
+    have monopsi:Antitone (alg.ψ ∘alg.z):= by
+      apply antitone_nat_of_succ_le
+      apply Sufficient_Descent2 γ hγ ck dk
+    rcases (tendsto_of_antitone monopsi) with h1|h2
+    have notbd:=unbounded_of_tendsto_atBot h1
+    have bdd:BddBelow (range (alg.ψ ∘ alg.z)):=by
+      apply BddBelow.mono _ lbdψ
+      simp
+      apply range_comp_subset_range
+    contradiction
+    exact h2
   rcases decent_ψ with ⟨ψ_final,hψ⟩
-  --我们证明这个收敛到的值正是我们要证的c
+  --show that ψ_final is what we need
   use ψ_final
   intro z_1 hz_1
-  --z_1是聚点，自然有下面这个结论
-  have z_1_cluster: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_1) :=
-    by sorry
-  --利用上面的limitset_property_1'的第二个结论，可知这个聚点必在crit中，即可完成证明
-  have :alg.ψ z_1= ψ_final:=
-    by sorry
+  have z_1_cluster: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_1) :=by
+    exact subseq_tendsto_of_neBot hz_1
+  rcases z_1_cluster with ⟨φ,⟨monoφ,conv⟩⟩
+  have :alg.ψ z_1= ψ_final:=by
+    have tend1:Tendsto (alg.ψ∘alg.z ∘ φ) atTop (𝓝 ψ_final):=by
+      obtain monoφ' := StrictMono.tendsto_atTop monoφ
+      calc
+        _ ≤ map (fun n ↦ ((alg.ψ∘alg.z) n)) atTop := by
+          rw [← Filter.map_map]; apply map_mono monoφ'
+        _ ≤ (𝓝 ψ_final) := by
+          exact hψ
+    have tend2:Tendsto (alg.ψ∘alg.z ∘ φ) atTop (𝓝 (alg.ψ z_1)):=
+      psiconv γ hγ ck dk φ z_1 monoφ conv bd lbdψ
+    apply tendsto_nhds_unique tend2 tend1
   exact this
 
 
@@ -953,26 +1608,25 @@ lemma sq_le_mul_le_mean {a b c : ℝ} (h : a ^ 2 ≤ b * c) (hpos : 0 ≤ b + c)
     _ ≤ (b + c) ^ 2 := this
   exact (abs_le_of_sq_le_sq' this hpos).2
 
-theorem tri (z : WithLp 2 (E × F)) : ‖z‖ ≤ ‖z.1‖ + ‖z.2‖:= by
-  have : ‖z‖ ^ 2 ≤ (‖z.1‖ + ‖z.2‖) ^ 2:= by
-    simp [WithLp.prod_norm_sq_eq_of_L2, add_sq]
-    refine mul_nonneg (mul_nonneg ?ha (norm_nonneg _)) (norm_nonneg _)
-    norm_num
-  apply nonneg_le_nonneg_of_sq_le_sq (Left.add_nonneg (norm_nonneg z.1) (norm_nonneg z.2))
-  rw [← pow_two, ← pow_two]
-  exact this
 
-theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ):
+theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃ M : ℝ, ∀ n, ∑ k in Finset.range n, ‖alg.z (k + 1) - alg.z k‖ ≤ M := by
-  obtain h1 := (IsCompact.isSeqCompact bd.isCompact_closure).subseq_of_frequently_in
-    (sorryAx (∃ᶠ (n : ℕ) in atTop, BCD.z n ∈ closure (alg.z '' univ)) true)
-  rcases h1 with ⟨z_, z_in, α, ⟨monoa, conv⟩⟩
+  have :∃ z_∈ closure (alg.z '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_):= by
+    have hcs:IsSeqCompact (closure (alg.z '' univ)) := by
+      apply IsCompact.isSeqCompact
+      exact bd.isCompact_closure
+    have even: ∃ᶠ n in atTop, alg.z n ∈ closure (alg.z '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
+      BCD.z n ∈ closure (alg.z '' univ)) true
+    exact hcs.subseq_of_frequently_in even
+  rcases this with ⟨z_,z_in,α,⟨monoa,conv⟩⟩
   rcases Sufficient_Descent1 γ hγ ck dk with ⟨ρ1,ρ1pos,suff_des⟩
   have z_in : z_ ∈ limit_set alg.z:= by
     simp [limit_set, MapClusterPt]
     apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
     calc
-      _ = map (fun n ↦ alg.z n) (map α atTop) := by rw [map_map]
+      _ = map (fun n ↦ alg.z n) (map α atTop) := by
+        rw [map_map]
+        rfl
       _ ≤ map (fun  n↦ alg.z n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
   have final m : ∃ n : ℕ, m ≤ α n := by
     induction' m with m ih
@@ -984,9 +1638,8 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       apply monoa
       norm_num
     linarith
-  have psiconv : Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
-    sorry
-
+  have psiconv:Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
+    apply psiconv γ hγ ck dk α z_ monoa conv bd lbdψ
   have monopsi (m n : ℕ) : alg.ψ (alg.z (m + n)) ≤ alg.ψ (alg.z m):= by
     induction' n with n ih
     · simp
@@ -1021,13 +1674,13 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
         _ < alg.ψ z_ + η := (ieq l1 left_mem_Ici).2
     have L2 : ∀ ε > 0, ∃ l2, ∀k > l2, (EMetric.infEdist (alg.z k) (limit_set alg.z)).toReal< ε := by
       rintro ε epos
-      rcases limitset_property_2 bd with tendt
+      rcases limitset_property_2 bd lbdψ with tendt
       rcases (atTop_basis.tendsto_iff (nhds_basis_abs_sub_lt (0:ℝ))).mp tendt ε epos with ⟨l2,_,ieq⟩
       simp at ieq; exact ⟨l2, fun k kgt ↦ (ieq k (le_of_lt kgt))⟩
     have active (n:ℕ) (ngt0 : n>0) : alg.z n ∈ active_domain alg.ψ := by
       simp [active_domain]
       push_neg
-      rcases @Ψ_subdiff_bound E F _ _ _ _ _ _ f g H x0 y0 l alg with ⟨_,_,ex⟩
+      rcases Ψ_subdiff_bound γ hγ ck dk with ⟨_,_,ex⟩
       rcases ex (n-1) with ⟨ d,din,_⟩
       have : d ∈ subdifferential alg.ψ (alg.z n) := by
         apply subdifferential_subset
@@ -1037,17 +1690,17 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       rintro z0 z0in; apply hψ
       simp [active_domain]
       intro empt
-      have : (0 : WithLp 2 (E × F)) ∈ subdifferential alg.ψ z0 := (limitset_property_1 bd).2 z0in
+      have : (0 : WithLp 2 (E × F)) ∈ subdifferential alg.ψ z0 := (limitset_property_1 γ hγ ck dk bd lbdψ).2 z0in
       rw [empt] at this; exact this
     have cons : is_constant_on alg.ψ (limit_set alg.z):= by
       simp [is_constant_on]
       intro x xin y yin
-      rcases limitset_property_4 bd with ⟨C,heq⟩
+      rcases limitset_property_4 γ hγ  ck dk bd lbdψ with ⟨C,heq⟩
       rw [heq x xin,heq y yin]
     have kl: ∃ ε ∈ Set.Ioi (0 : ℝ), ∃ η ∈  Set.Ioi (0 : ℝ), ∃ φ ∈ special_concave η, ∃ LL, ∀ n > LL,
         (alg.ψ z_ < alg.ψ (alg.z n) ∧ alg.ψ (alg.z n) < alg.ψ z_ + η) ∧ deriv φ (alg.ψ (alg.z n)
         - alg.ψ z_) * (EMetric.infEdist 0 (subdifferential alg.ψ (alg.z n))).toReal ≥ 1 := by
-      rcases uniformly_KL_property (limitset_property_3 bd).1 wklpt cons
+      rcases uniformly_KL_property (limitset_property_3 γ hγ ck dk bd lbdψ).1 wklpt cons
         with ⟨ε, eppos, η, etpos, φ, hφ, pro⟩
       rcases L1 η etpos with ⟨l1,lem1⟩
       rcases L2 ε eppos with ⟨l2,lem2⟩
@@ -1076,7 +1729,7 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       obtain ⟨⟨h1, h2⟩, _⟩ := ieq
       constructor <;> linarith
     have hlin' n := Ioo_subset_Ico_self (hlin n)
-    obtain ⟨ρ, ρpos, hsgub⟩ := @Ψ_subdiff_bound E F _ _ _ _ _ _ f g H x0 y0 l alg
+    obtain ⟨ρ, ρpos, hsgub⟩ := Ψ_subdiff_bound γ hγ ck dk
     let C := ρ / (ρ1 / 2)
     have hnnegC : 0 ≤ C := div_nonneg (le_of_lt ρpos) (by linarith)
     have hposa n : 0 < a n := by
@@ -1093,8 +1746,6 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
         exact h6 _ (hlin n)
       have hbd2 : 1 ≤ ρ * (c n) * d n := by
         obtain ⟨dpsi, hdp, hub⟩ := hsgub (n + LL)
-        have : (alg.x (n + LL + 1), alg.y (n + LL + 1)) = (alg.z (n + LL + 1)) := by rfl
-        rw [this] at hdp
         obtain hdp := subdifferential_subset _ _ hdp
         have := infEdist_bound _ hdp
         calc
@@ -1209,12 +1860,12 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       rw [eq0, epty]
       exact Preorder.le_refl 0
 
-theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) :
+theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃z_ : (WithLp 2 (E × F)), z_ ∈ (critial_point alg.ψ) ∧ Tendsto alg.z atTop (𝓝 z_):= by
   have : ∃ z_, Tendsto alg.z atTop (𝓝 z_) := by
     apply cauchySeq_tendsto_of_complete
     apply cauchySeq_of_summable_dist
-    rcases Limited_length γ hγ ck dk bd hψ with ⟨M,sumle⟩
+    rcases Limited_length γ hγ ck dk bd hψ lbdψ with ⟨M,sumle⟩
     apply @summable_of_sum_range_le _ M _ _
     intro n; simp; exact dist_nonneg
     intro n
@@ -1227,7 +1878,6 @@ theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : 
   have z_in : z_∈limit_set alg.z := by
     simp [limit_set,MapClusterPt]
     exact ClusterPt.of_le_nhds hzz
-  apply (limitset_property_1 bd).2 z_in
+  apply (limitset_property_1 γ hγ ck dk bd lbdψ).2 z_in
 
 end Limited_length
-end
