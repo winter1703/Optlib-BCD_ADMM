@@ -590,7 +590,15 @@ lemma f_subdiff_block (hf : u ∈ f_subdifferential f x) (hg : v ∈ f_subdiffer
     ⟨u, v⟩ ∈ f_subdifferential (fun z ↦ f z.1 + g z.2 : WithLp 2 (E × F) → ℝ) ⟨x, y⟩ := by
   rw [has_f_subdiff_iff] at *
   intro ε εpos
-  sorry
+  have ε2pos : 0 < ε / 2 := by positivity
+  filter_upwards [Eventually.prod_nhds (hf _ ε2pos) (hg _ ε2pos)] with z ⟨hfz, hyz⟩
+  rw [WithLp.prod_inner_apply]
+  simp only [WithLp.sub_fst, WithLp.sub_snd]
+  let z' : WithLp 2 (E × F) := (x, y)
+  show f z.1 + g z.2 - (f x + g y) - (⟪u, z.1 - x⟫_ℝ + ⟪v, z.2 - y⟫_ℝ) ≥ -ε * ‖z - z'‖
+  have h1 : ‖z.1 - x‖ ≤ ‖z - z'‖ := fst_norm_le_prod_L2 (z - z')
+  have h2 : ‖z.2 - y‖ ≤ ‖z - z'‖ := snd_norm_le_prod_L2 (z - z')
+  linarith [(mul_le_mul_iff_of_pos_left ε2pos).mpr h1, (mul_le_mul_iff_of_pos_left ε2pos).mpr h2]
 
 /- Define the A^k_x -/
 def BCD.A_kx k := (alg.c k)⁻¹ • (alg.x k - alg.x (k + 1)) - (grad_fst H (alg.y k) (alg.x k))
@@ -680,22 +688,7 @@ lemma fconv (α : ℕ → ℕ) (z_ : WithLp 2 (E×F)) (monoa : StrictMono α)
       rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
       have con11H:ContinuousOn (fun (x,y)↦grad_fst H y x) (Metric.closedBall (0:WithLp 2 (E×F)) C1) := by
         apply Continuous.continuousOn
-        have : LipschitzWith l (fun (x,y) ↦ grad_fst H y x) := by
-          apply lipschitzWith_iff_norm_sub_le.mpr
-          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
-          simp
-          calc
-            ‖grad_fst H y1 x1 - grad_fst H y2 x2‖
-              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
-                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).left
-            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
-              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
-              rw [lipschitzWith_iff_norm_sub_le] at lip
-              specialize lip (x1,y1) (x2,y2)
-              simp [grad_fun_comp, grad_comp] at lip
-              rw [sub_prod] at lip
-              sorry
-        apply LipschitzWith.continuous this
+        exact LipschitzWith.continuous (lip_grad_fst_of_lip alg.Hdiff alg.lip)
       have :IsCompact (Metric.closedBall 0 C1) := by exact (isCompact_closedBall 0 C1)
       rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) E _ _ _
         (isCompact_closedBall (0:WithLp 2 (E×F)) C1) (fun (x,y)↦grad_fst H y x) con11H with ⟨C,sqsq⟩
@@ -914,24 +907,9 @@ lemma gconv(α:ℕ→ℕ)(z_:WithLp 2 (E×F))(monoa:StrictMono α )(conv:Tendsto
       linarith [ieq,this]
     have Hbd :∃C,∀q:ℕ ,‖(grad_snd H (alg.x (α q )) (alg.y (α q -1)))‖≤C:= by
       rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
-      have con11H:ContinuousOn (fun (x,y)↦grad_snd H x y) (Metric.closedBall (0:WithLp 2 (E×F)) (2*C1)) := by
+      have con11H : ContinuousOn (fun (x,y) ↦ grad_snd H x y) (Metric.closedBall (0:WithLp 2 (E×F)) (2*C1)) := by
         apply Continuous.continuousOn
-        have :LipschitzWith l (fun (x,y)↦grad_snd H x y) := by
-          apply lipschitzWith_iff_norm_sub_le.mpr
-          rintro ⟨x1,y1⟩ ⟨x2,y2⟩
-          simp
-          calc
-            ‖grad_snd H x1 y1 - grad_snd H x2 y2‖
-              ≤‖(grad_fst H y1 x1 - grad_fst H y2 x2,grad_snd H x1 y1 - grad_snd H x2 y2)‖:= by
-                exact (comp_norm_le (grad_fst H y1 x1 - grad_fst H y2 x2) (grad_snd H x1 y1 - grad_snd H x2 y2)).right
-            _≤ ↑l * ‖(x1 - x2, y1 - y2)‖:= by
-              have lip : LipschitzWith l (grad_fun_comp H) := alg.lip₁
-              rw [lipschitzWith_iff_norm_sub_le] at lip
-              specialize lip (x1,y1) (x2,y2)
-              simp [grad_fun_comp,grad_comp] at lip
-              -- exact lip
-              sorry
-        apply LipschitzWith.continuous this
+        exact LipschitzWith.continuous (lip_grad_snd_of_lip alg.Hdiff alg.lip)
       rcases @IsCompact.exists_bound_of_continuousOn (WithLp 2 (E×F)) F _ _ _ (isCompact_closedBall (0:WithLp 2 (E×F)) (2*C1))
         (fun (x,y)↦grad_snd H x y) con11H with ⟨C,sqsq⟩
       use C
