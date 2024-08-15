@@ -22,7 +22,7 @@ noncomputable section
 variable {E F : Type*}
 variable [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
 variable [NormedAddCommGroup F] [InnerProductSpace ℝ F] [CompleteSpace F]
-variable {H : WithLp 2 (E × F) → ℝ} {x : E} {y : F}
+variable {H : WithLp 2 (E × F) → ℝ} {x : E} {y : F} {z : WithLp 2 (E × F)} {l : NNReal}
 
 open Set Bornology Filter BigOperators Topology
 
@@ -100,10 +100,38 @@ theorem diff_prod₂ (h : Differentiable ℝ H) (x : E) :
   apply Differentiable.comp (diff_from_l2 h)
   exact Differentiable.prod (differentiable_const x) differentiable_id'
 
-theorem grad_eq_block_grad (h : Differentiable ℝ H) : gradient H = grad_fun_comp H := by
-  apply gradient_eq
-  intro z
+theorem grad_fst_eq (h : Differentiable ℝ H) : (gradient H z).1 = grad_fst H z.2 z.1 := by
   sorry
+
+theorem grad_snd_eq (h : Differentiable ℝ H) : (gradient H z).2 = grad_snd H z.1 z.2 := by
+  sorry
+
+theorem grad_eq_block_grad (h : Differentiable ℝ H) : gradient H = grad_fun_comp H := by
+  ext z
+  calc
+    gradient H z = ((gradient H z).1, (gradient H z).2) := rfl
+    _ = (grad_fst H z.2 z.1, grad_snd H z.1 z.2) := by rw [← grad_fst_eq h, ← grad_snd_eq h]
+    _ = grad_fun_comp H z := rfl
+
+theorem lip_grad_fst_of_lip (h : Differentiable ℝ H) (hl : LipschitzWith l (gradient H)) :
+    LipschitzWith l (fun (z : WithLp 2 (E × F)) ↦ grad_fst H z.2 z.1) := by
+  rw [lipschitzWith_iff_norm_sub_le] at *
+  intro z z'
+  calc
+    _ = ‖(gradient H z).1 - (gradient H z').1‖ := by rw [grad_fst_eq h, grad_fst_eq h]
+    _ = ‖(gradient H z - gradient H z').1‖ := rfl
+    _ ≤ ‖(gradient H z - gradient H z')‖ := fst_norm_le_prod_L2 _
+    _ ≤ _ := hl z z'
+
+theorem lip_grad_snd_of_lip (h : Differentiable ℝ H) (hl : LipschitzWith l (gradient H)) :
+    LipschitzWith l (fun (z : WithLp 2 (E × F)) ↦ grad_snd H z.1 z.2) := by
+  rw [lipschitzWith_iff_norm_sub_le] at *
+  intro z z'
+  calc
+    _ = ‖(gradient H z).2 - (gradient H z').2‖ := by rw [grad_snd_eq h, grad_snd_eq h]
+    _ = ‖(gradient H z - gradient H z').2‖ := rfl
+    _ ≤ ‖(gradient H z - gradient H z')‖ := snd_norm_le_prod_L2 _
+    _ ≤ _ := hl z z'
 
 end
 
@@ -228,7 +256,7 @@ lemma sub_prod (x x1 : E) (y y1 : F) : ((x, y) : WithLp 2 (E × F)) - (x1, y1) =
 
 theorem BCD.lip₁ : LipschitzWith l (grad_fun_comp H) := by
   obtain lip := alg.lip
-  rw [grad_eq_block_grad alg.Hdiff] at lip; exact lip
+  rwa [grad_eq_block_grad alg.Hdiff] at lip
 
 /- coordinate Lipschitz continuous -/
 theorem BCD.coordinate_lip : (∀ y, LipschitzWith l (grad_fst H y))
@@ -323,8 +351,7 @@ theorem Sufficient_Descent1 : ∃ ρ₁ > 0, ρ₁ = (γ - 1) * l ∧
   have ργL : ρ₁ = (γ - 1) * l := rfl
   constructor; obtain hl := alg.lpos; apply mul_pos; linarith; exact hl;
   constructor; rfl
-  obtain Hass := alg.coordinate_lip
-  obtain ⟨hfstlip, hsndlip⟩ := Hass
+  obtain ⟨hfstlip, hsndlip⟩ := alg.coordinate_lip
   intro k
   have hHf : H (alg.x (k + 1), alg.y k) + f (alg.x (k + 1)) ≤ H (alg.x k, alg.y k) + f (alg.x k)
       - 1 / 2 * (γ - 1) * l * ‖alg.x (k + 1) - alg.x k‖ ^ 2 :=
@@ -593,9 +620,14 @@ theorem Ψ_subdiff_bound : ∃ ρ > 0, ∀ k,
     · exact DifferentiableAt.hasGradientAt (Differentiable.differentiableAt alg.Hdiff)
   · apply le_trans (prod_norm_le_block_sum_L2 (alg.subdiff k))
     have h1 : ‖(alg.subdiff k).1‖ ≤ l * (γ + 1) * ‖alg.z (k + 1) - alg.z k‖ := by
-      simp only [BCD.subdiff, BCD.A_kx, Prod.fst_add, grad_fun_comp, grad_comp, sub_add]
+      rw [BCD.subdiff, Prod.fst_add, BCD.A_k, BCD.A_kx, grad_fst_eq alg.Hdiff]
+      simp only
       sorry
-    sorry
+    have h2 : ‖(alg.subdiff k).2‖ ≤ l * (γ + 1) * ‖alg.z (k + 1) - alg.z k‖ := by
+      rw [BCD.subdiff, Prod.snd_add, BCD.A_k, grad_snd_eq alg.Hdiff]
+      simp only
+      sorry
+    linarith
 
 end Upperbound_subd
 
@@ -648,7 +680,7 @@ lemma fconv (α : ℕ → ℕ) (z_ : WithLp 2 (E×F)) (monoa : StrictMono α)
       rcases isBounded_iff_forall_norm_le.mp bd with ⟨C1,inin⟩
       have con11H:ContinuousOn (fun (x,y)↦grad_fst H y x) (Metric.closedBall (0:WithLp 2 (E×F)) C1) := by
         apply Continuous.continuousOn
-        have :LipschitzWith l (fun (x,y)↦grad_fst H y x) := by
+        have : LipschitzWith l (fun (x,y) ↦ grad_fst H y x) := by
           apply lipschitzWith_iff_norm_sub_le.mpr
           rintro ⟨x1,y1⟩ ⟨x2,y2⟩
           simp
