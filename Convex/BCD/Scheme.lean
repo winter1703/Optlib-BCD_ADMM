@@ -17,7 +17,6 @@ def limit_set (z : ℕ → E) :=
 
 end
 
-
 noncomputable section
 
 variable {E F : Type*}
@@ -148,7 +147,7 @@ class ProblemData (f : E → ℝ) (g : F → ℝ) (H : (WithLp 2 (E × F)) → �
 /-
   The definition of block coordinate descent
 -/
-structure BCD (f : E → ℝ) (g : F → ℝ) (H : E × F → ℝ) (l : NNReal)
+structure BCD (f : E → ℝ) (g : F → ℝ) (H : (WithLp 2 (E × F)) → ℝ) (l : NNReal)
     (x0 : E) (y0 : F) extends ProblemData f g H l where
   x : ℕ → E
   y : ℕ → F
@@ -184,9 +183,9 @@ def BCD.fprop {self : BCD f g H l x0 y0} (k : ℕ) : E → ℝ :=
   (fun u ↦ (self.c k • f) u + ‖u - (self.x k -
     self.c k • grad_fst H (self.y k) (self.x k))‖ ^ 2 / 2)
 
-def BCD.gprop {self : BCD f g H l x0 y0} (k : ℕ) :=
-  (fun u ↦ (self.d k • g) u + ‖u - (self.y k -
-    self.c k • grad_snd H (self.x (k + 1)) (self.y k))‖ ^ 2 / 2)
+-- def BCD.gprop {self : BCD f g H l x0 y0} (k : ℕ) :=
+--   (fun u ↦ (self.d k • g) u + ‖u - (self.y k -
+--     self.c k • grad_snd H (self.x (k + 1)) (self.y k))‖ ^ 2 / 2)
 
 variable {alg : BCD f g H l x0 y0} (γ : ℝ) (hγ : γ > 1)
 
@@ -208,19 +207,17 @@ lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_r
 
 section Assumption
 
+lemma BCD.Hdiff : Differentiable ℝ H := alg.conf.differentiable (Preorder.le_refl 1)
+
+>>>>>>> dce4a35865d461afd39bda02ae457f7a6a671d4b
 lemma norm_prod' (x : E) (y : F) : ‖(x, y)‖ = max ‖x‖ ‖y‖ := rfl
 
 lemma comp_norm_le (x : E) (y : F) : (‖x‖ ≤ ‖(x,y)‖) ∧ (‖y‖ ≤ ‖(x,y)‖) :=
   ⟨le_max_left ‖x‖ ‖y‖, le_max_right ‖x‖ ‖y‖⟩
 
-lemma norm_prod_right_zero (x : E) : ‖(x, (0 : F))‖ = ‖x‖ := by
-  rw [norm_prod']
-  rw [norm_zero]; apply le_antisymm
-  apply max_le_iff.2
-  constructor; norm_num
-  exact norm_nonneg x
-  apply le_max_iff.2
-  left; norm_num
+lemma norm_prod_right_zero (x : E) :
+    @norm (WithLp 2 (E × F)) _ ((x, (0 : F)) : WithLp 2 (E × F)) = ‖x‖ := by
+  rw [WithLp.prod_norm_eq_of_L2] ; simp
 
 lemma norm_prod_left_zero (y : F): ‖((0 : E), y)‖ = ‖y‖ := by
   rw [norm_prod']
@@ -575,6 +572,7 @@ lemma StrictMono_nat (φ : ℕ → ℕ) (hφ: StrictMono φ) : (∀ (n:ℕ), n �
 lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
     (limit_set alg.z).Nonempty ∧ ((limit_set alg.z) ⊆ critial_point alg.ψ) := by
   constructor
+  --nonempty
   have hz : ∀ (n : ℕ), alg.z n ∈ alg.z '' univ:= by intro n; use n; constructor; exact Set.mem_univ n; rfl
   have : ∃ a ∈ closure (alg.z '' univ), ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds a):=
     tendsto_subseq_of_bounded (bd) (hz)
@@ -604,11 +602,11 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
   have h_t : (BCD.z (φ n)) ∈ t := hN n hn
   have h_s : (BCD.z (φ n)) ∈ s := t_s h_t
   exact h_s
-  --至此，非空证明完毕，下面开始证明更强的结论limit_set BCD.z ⊆ critial_point BCD.ψ
-  intro a ha
-  have ha': MapClusterPt a atTop alg.z :=ha
+  --the folllowing shows that limit_set BCD.z ⊆ critial_point BCD.ψ
+  intro z_ ha
+  have ha': MapClusterPt z_ atTop alg.z :=ha
 
-  have: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto ((alg.z) ∘ φ) Filter.atTop (nhds a) :=
+  have: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto ((alg.z) ∘ φ) Filter.atTop (nhds z_) :=
     TopologicalSpace.FirstCountableTopology.tendsto_subseq ha'
   rcases this with ⟨φ,Monoφ,convergentφ⟩
   have hH := convergentφ
@@ -718,95 +716,343 @@ lemma limitset_property_1 (bd : Bornology.IsBounded (alg.z '' univ)) :
   apply Set.mem_setOf.mpr
   exact zero_in_partial
 
-lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ)):
+
+lemma limitset_property_2 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : BddBelow (alg.ψ '' univ)):
     Tendsto (fun n ↦ (EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal) atTop (𝓝 0) := by
-  have : ∃ za ∈limit_set alg.z, ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds za) := by
-    unfold limit_set
-    --rw[Set.mem_setOf] at za_limit_set
-    --have:=TopologicalSpace.FirstCountableTopology.tendsto_subseq za_limit_set
-    --rcases this with ⟨φ,⟨StrictMono_φ,Filter.Tendsto_φ⟩⟩
-    --use φ
-    sorry
-  rcases this with ⟨za, za_limit_set, φ, ⟨StrictMono_φ, Filter.Tendsto_φ⟩⟩
-  --下面这个have是三角不等式
-  have: ∀n:ℕ ,∀q:ℕ,(EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal ≤ (EMetric.infEdist
-      ((alg.z ∘ φ) q) (limit_set alg.z)).toReal + (∑ (x ∈ Finset.Icc n q), (fun c =>‖alg.z (c-1)-alg.z c‖) x):=
-    by
-      sorry
-  --下面一个have结论需要使用到充分下降原理，类似cauthy定理那样，去证明邻项也趋于同一个极限，从而完成证明
-  have: Tendsto (fun n ↦ (EMetric.infEdist (alg.z n) (limit_set alg.z)).toReal) atTop (𝓝 0) :=
-    by sorry
-  exact this
+  apply (nhds_basis_Ioo_pos 0).tendsto_right_iff.mpr
+  rintro ε epos
+  by_contra h
+  simp at h
+  --alg.z∘W is the subseq s.t. the dist is no less than ε
+  let W:ℕ → ℕ:=fun n ↦
+    Nat.recOn n (Classical.choose (h 0))
+    fun n p ↦ (Classical.choose (h (p+1)))
+  have monoW:StrictMono W:=by
+    have (n:ℕ):W n+1≤W (n+1):=(Classical.choose_spec (h (W n +1))).1
+    have (n:ℕ):W n<W (n+1):= this n
+    apply strictMono_nat_of_lt_succ this
+  have bd':Bornology.IsBounded (alg.z∘W '' univ):=by
+    apply bd.subset
+    intro k;simp
+    exact fun x zk ↦ ⟨W x,zk⟩
+  have :∃ z_∈ closure (alg.z∘W '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ (alg.z∘W) (α n)) atTop (𝓝 z_):= by
+    have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
+      apply IsCompact.isSeqCompact
+      exact bd'.isCompact_closure
+    have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx
+      (∃ᶠ (n : ℕ) in atTop, (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
+    apply hcs.subseq_of_frequently_in even
+  rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
+  have z_in : z_ ∈ limit_set alg.z:= by
+    simp [limit_set, MapClusterPt]
+    apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
+    calc
+      _ = map (fun n ↦ (alg.z∘W) n) (map α atTop) := by
+        rw [map_map]
+        rfl
+      _ ≤ map (fun n↦ (alg.z∘W) n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
+      _ ≤ map (fun n↦ alg.z n) atTop:= by
+        rw [←map_map]
+        apply map_mono (StrictMono.tendsto_atTop monoW)
+  --show the contradiction
+  have z_0:(EMetric.infEdist (z_) (limit_set alg.z)).toReal=0:= by
+    have :(EMetric.infEdist (z_) (limit_set alg.z))=0:=EMetric.infEdist_zero_of_mem z_in
+    refine (ENNReal.toReal_eq_zero_iff _).mpr ?_
+    left;exact this
+  have z_ge:(EMetric.infEdist (z_) (limit_set alg.z)).toReal≥ε:=by
+    have :Tendsto (fun n ↦(EMetric.infEdist ((alg.z∘W) (α n)) (limit_set alg.z)).toReal)
+      atTop (𝓝 (EMetric.infEdist (z_) (limit_set alg.z)).toReal):=
+      continuous_iff_seqContinuous.mp (Metric.continuous_infDist_pt (limit_set z)) conv
+    apply ge_of_tendsto this
+    simp
+    use 1
+    rintro n len
+    have key:ε≤(EMetric.infEdist ((alg.z ∘ W) (α n -1 +1)) (limit_set alg.z)).toReal:=by
+      apply (Classical.choose_spec (h (W (α n -1) +1))).2
+      calc
+        -ε<0:=by linarith
+        _≤(EMetric.infEdist (alg.z (Classical.choose (h (W (α n -1) +1)))) (limit_set alg.z)).toReal:=by
+          exact ENNReal.toReal_nonneg
+    have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+    rw [←this]
+    exact key
+  linarith
 
-lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ)):
+lemma limitset_property_3 (bd : Bornology.IsBounded (alg.z '' univ))(lbdψ : BddBelow (alg.ψ '' univ)):
     IsCompact (limit_set alg.z) ∧ IsConnected (limit_set alg.z) := by
+  have com:IsCompact (limit_set alg.z):=by
+    apply Metric.isCompact_of_isClosed_isBounded
+    apply isClosed_setOf_clusterPt
+    apply isBounded_iff_forall_norm_le.mpr
+    rcases isBounded_iff_forall_norm_le.mp bd with ⟨C,zin⟩
+    use C
+    rintro z_ z_in
+    rcases subseq_tendsto_of_neBot z_in with ⟨φ,⟨monoφ,conv⟩⟩
+    apply le_of_tendsto'
+      (Tendsto.norm conv) (fun n↦zin (alg.z (φ n)) (mem_image_of_mem alg.z (mem_univ (φ n))) )
   constructor
-  let set_le :ℕ -> Set ℕ := (fun k => {x | k≤ x})
-  let Z:ℕ -> Set (WithLp 2 (E × F)) := (fun k => closure (⋃ (q∈ (set_le q)),{alg.z q}))
-  --下面这个have是关键，正是注意到limit_set alg.z的这种表达形式，才可完成证明
-  have: (limit_set alg.z) = (⨅ q ∈ (Set.Ioi 0), Z q) :=
-    by sorry
-  --每个zk都是紧集
-  have compact_zk:∀ k:ℕ,IsCompact (Z k) :=by
-    intro k
-    apply Metric.isCompact_iff_isClosed_bounded.mpr
-    sorry
-  --利用代数性质即可证明结论
-  have:IsCompact (limit_set alg.z):=by
-    sorry
-  exact this
-
-  --紧集证明完毕，还需要证明连通，此处利用反证法
+  exact com
+  --the following is the proof of connectivity
   have:IsConnected (limit_set alg.z)<->((limit_set alg.z).Nonempty ∧ IsPreconnected (limit_set alg.z)):= by rfl
   rw[this]
   constructor
-  exact (limitset_property_1 (bd)).1
-  have : IsPreconnected (limit_set alg.z) =   ∀ (u v : Set (WithLp 2 (E × F))), IsOpen u
-      → IsOpen v → (limit_set alg.z) ⊆ u ∪ v → ((limit_set alg.z) ∩ u).Nonempty →
-      ((limit_set alg.z) ∩ v).Nonempty → ((limit_set alg.z) ∩ (u ∩ v)).Nonempty:=by rfl
-  rw[this]
-  --上面都是些准备工作，下面利用反证法去证明结论
+  exact (limitset_property_1 γ hγ ck dk bd lbdψ).1
+  rw [isPreconnected_closed_iff]
+  --construct closed A,B such that A∩B=∅,A∪B=limit_set
   by_contra nonconnect
   push_neg at nonconnect
-  rcases nonconnect with ⟨A,B,openA,openB,sub_AB,nez_A,nez_B,nz_AB⟩
-  let γ : (E × F) -> ℝ := fun z => ((EMetric.infEdist z A).toReal) /
+  rcases nonconnect with ⟨a,b,closea,closeb,sub_ab,nez_a,nez_b,nz_ab⟩
+  let A:=(limit_set alg.z)∩a
+  let B:=(limit_set alg.z)∩b
+  have closeA:IsClosed A:=IsClosed.inter (isClosed_setOf_clusterPt) closea
+  have closeB:IsClosed B:=IsClosed.inter (isClosed_setOf_clusterPt) closeb
+  have noneptA:A.Nonempty:=nez_a
+  have noneptB:B.Nonempty:=nez_b
+  have eqAB:A∪B=(limit_set alg.z):=by
+    simp [A,B]
+    calc
+      (limit_set z∩a) ∪ ( limit_set z∩ b) =  limit_set z∩(a∪b):=
+        (inter_union_distrib_left (limit_set z) a b).symm
+      _=limit_set z:= (left_eq_inter.mpr sub_ab).symm
+  have disjoint_AB:A∩B=∅:= by
+    simp [A,B]
+    calc
+      limit_set z ∩ a ∩ (limit_set z ∩ b)=limit_set z ∩ (a∩b):=
+        (inter_inter_distrib_left (limit_set z) a b).symm
+      _=∅:=nz_ab
+  --ω is a function that shows the relation between z and A,B
+  let ω : WithLp 2 (E × F) -> ℝ := fun z => ((EMetric.infEdist z A).toReal) /
     ((EMetric.infEdist z A).toReal+(EMetric.infEdist z B).toReal)
-  --这里γ是一个距离定义的函数，而距离连续，从而容易知道其连续，正如下面这个have所说的。
-  have : Continuous γ := by sorry
-  --A,B分别是连续函数γ在0，1下的完全原象
-  have A_eq: A = Set.preimage γ ({0}) := by sorry
-  have B_eq: B = Set.preimage γ ({1}) := by sorry
-  let U : Set (E × F) := {z:(E × F)|(γ z)<(1/4)}
-  let V : Set (E × F) := {z:(E × F)|(3/4)<(γ z)}
-  --alg.z 终将落到U或者V中
+  have sum_ne_zero:∀ z ,(EMetric.infEdist z A).toReal+(EMetric.infEdist z B).toReal≠0:= by
+    intro z eq0
+    have inA:z∈A:=by
+      apply EMetric.mem_closure_iff_infEdist_zero.mpr
+      show EMetric.infEdist z A=0
+      have net:EMetric.infEdist z A≠⊤:=by
+        exact Metric.infEdist_ne_top nez_a
+      have :(EMetric.infEdist z A).toReal=0:=by
+        linarith [eq0,@ENNReal.toReal_nonneg (EMetric.infEdist z A),@ENNReal.toReal_nonneg (EMetric.infEdist z B)]
+      exact (((fun {x y} hx hy ↦ (ENNReal.toReal_eq_toReal_iff' hx hy).mp)
+          ENNReal.top_ne_zero.symm net (id (Eq.symm this)))).symm
+      simp;constructor;apply closeA;exact fun ⦃a⦄ a ↦ a
+    have inB:z∈B:=by
+      apply EMetric.mem_closure_iff_infEdist_zero.mpr
+      show EMetric.infEdist z B=0
+      have net:EMetric.infEdist z B≠⊤:=by
+        exact Metric.infEdist_ne_top nez_b
+      have :(EMetric.infEdist z B).toReal=0:=by
+        linarith [eq0,@ENNReal.toReal_nonneg (EMetric.infEdist z A),@ENNReal.toReal_nonneg (EMetric.infEdist z B)]
+      exact (((fun {x y} hx hy ↦ (ENNReal.toReal_eq_toReal_iff' hx hy).mp)
+          ENNReal.top_ne_zero.symm net (id (Eq.symm this)))).symm
+      simp;constructor;apply closeB;exact fun ⦃a⦄ a ↦ a
+    have :z∈A∩B:=mem_inter inA inB
+    rw [disjoint_AB] at this
+    contradiction
+  have contω: Continuous ω := by
+    apply Continuous.div
+    exact Metric.continuous_infDist_pt A
+    apply Continuous.add (Metric.continuous_infDist_pt A) (Metric.continuous_infDist_pt B)
+    apply sum_ne_zero
+  let U := {z:WithLp 2 (E × F)|(ω z)<(1/4)}
+  let V := {z:WithLp 2 (E × F)|(3/4)<(ω z)}
+  have A0:∀ z_∈A,ω z_ =0:= by
+    rintro z_ zA
+    rw [div_eq_zero_iff]
+    left
+    have :EMetric.infEdist z_ A=0:=by
+      apply EMetric.infEdist_zero_of_mem zA
+    rw [this];rfl
+  have B1:∀z_∈ B,ω z_ =1:= by
+    rintro z_ zB
+    simp [ω]
+    apply (div_eq_one_iff_eq (sum_ne_zero z_)).mpr
+    simp
+    have :EMetric.infEdist z_ B=0:=by
+      apply EMetric.infEdist_zero_of_mem zB
+    rw [this];rfl
+  --eventually alg.z falls in U or V
   have U_V_prop:∃ k0:ℕ,∀ k:ℕ, (k0 ≤ k) -> (alg.z k ∈ U) ∨ (alg.z k ∈ V) := by
-    by_contra h_contra
-    sorry
+    by_contra h
+    push_neg at h
+    let W:ℕ→ℕ:=fun n↦
+      Nat.recOn n (Classical.choose (h 0))
+      fun n p ↦ (Classical.choose (h (p+1)))
+    have monoW:StrictMono W:=by
+      have (n:ℕ):W n+1≤W (n+1):=(Classical.choose_spec (h (W n +1))).1
+      have (n:ℕ):W n<W (n+1):= this n
+      apply strictMono_nat_of_lt_succ this
+    have bd':Bornology.IsBounded (alg.z∘W '' univ):=by
+      apply bd.subset
+      intro k;simp
+      exact fun x zk ↦ ⟨W x,zk⟩
+    have :∃ z_∈ closure (alg.z∘W '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ (alg.z∘W) (α n)) atTop (𝓝 z_):= by
+      have hcs:IsSeqCompact (closure (alg.z∘W '' univ)) := by
+        apply IsCompact.isSeqCompact
+        exact bd'.isCompact_closure
+      have even: ∃ᶠ n in atTop, (alg.z∘W) n ∈ closure (alg.z∘W '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
+        (BCD.z∘W) n ∈ closure (alg.z∘W '' univ)) true
+      apply hcs.subseq_of_frequently_in even
+    rcases this with ⟨z_,_,α,⟨monoa,conv⟩⟩
+    have z_in : z_ ∈ limit_set alg.z:= by
+      simp [limit_set, MapClusterPt]
+      apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
+      calc
+        _ = map (fun n ↦ (alg.z∘W) n) (map α atTop) := by
+          rw [map_map]
+          rfl
+        _ ≤ map (fun n↦ (alg.z∘W) n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
+        _ ≤ map (fun n↦ alg.z n) atTop:= by
+          rw [←map_map]
+          apply map_mono (StrictMono.tendsto_atTop monoW)
+    rw [←eqAB] at z_in
+    rcases z_in with zA | zB
+    · have :ω z_ =0:= A0 z_ zA
+      have z_ge:ω z_≥1/4:=by
+        have :Tendsto (fun n ↦(ω ((alg.z∘W∘α)  n)) ) atTop (𝓝 (ω z_)):=
+          continuous_iff_seqContinuous.mp (contω) conv
+        apply ge_of_tendsto this
+        simp
+        use 1
+        rintro n len
+        have key:1/4≤ω ((alg.z ∘ W) (α n -1 +1)) :=by
+          have :(alg.z ∘ W) (α n -1 +1)∉U:= (Classical.choose_spec (h (W (α n -1) +1))).2.1
+          rw [Set.mem_setOf] at this
+          push_neg at this;exact this
+        have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+        rw [←this]
+        simp at key;exact key
+      linarith
+    · have :ω z_ =1:= B1 z_ zB
+      have z_ge:ω z_≤3/4:=by
+        have :Tendsto (fun n ↦(ω ((alg.z∘W∘α)  n)) ) atTop (𝓝 (ω z_)):=
+          continuous_iff_seqContinuous.mp (contω) conv
+        apply le_of_tendsto this
+        simp
+        use 1
+        rintro n len
+        have key:ω ((alg.z ∘ W) (α n -1 +1))≤3/4 :=by
+          have :(alg.z ∘ W) (α n -1 +1)∉V:= (Classical.choose_spec (h (W (α n -1) +1))).2.2
+          rw [Set.mem_setOf] at this
+          push_neg at this;exact this
+        have :α n -1+1=α n:= tsub_add_cancel_iff_le.mpr (Nat.one_le_of_lt (monoa len))
+        rw [←this]
+        simp at key;exact key
+      linarith
   rcases U_V_prop with ⟨k0,hk0⟩
-  let r : ℕ ->ℝ := fun k => (γ ∘ alg.z) k
-  have r_prop:(∀ k:ℕ ,(k0≤k) -> (r k) ∉ (Set.Icc (1/4) (3/4))) ∧ Infinite ({k:ℕ | r k < 1/4})
-      ∧ Infinite ({k:ℕ | 3/4 < r k}) ∧ Tendsto (fun k => |r (k+1)-r k|) Filter.atTop (nhds 0) :=
-    by sorry
-  --下面就可以引入矛盾，因为由于充分下降，zk与zk+1终将无限接近
-  --但是上面这个r表明，将会有无限的r k分别小于1/4与大于3/4，这显然矛盾，这正是下面这个sorry的内容
-  sorry
+  --eventually alg.z falls into the same U or V
+  have unicont:UniformContinuousOn ω (closure (alg.z '' univ)):=IsCompact.uniformContinuousOn_of_continuous
+    bd.isCompact_closure contω.continuousOn
+  have :∀ε>0,∃ δ>0,∀ x1∈(closure (alg.z '' univ)), ∀x2∈(closure (alg.z '' univ)),‖x1-x2‖<δ → ‖ω x1 -ω x2‖<ε:=by
+    have h:= (((@NormedAddCommGroup.uniformity_basis_dist (WithLp 2 (E×F)) _).inf
+    (hasBasis_principal ((closure (alg.z '' univ)) ×ˢ(closure (alg.z '' univ))))).tendsto_iff
+    (@NormedAddCommGroup.uniformity_basis_dist ℝ _) ).mp unicont
+    simp at h
+    rw [Eq.symm image_univ ] at h
+    rintro ε epos
+    rcases h ε epos with ⟨δ,⟨dpos,ieq⟩⟩
+    exact ⟨δ,⟨dpos,fun x1 x1s x2 x2s dis↦ieq x1 x2 dis x1s x2s⟩⟩
+  have :∀ε>0,∃ N,∀n≥N,‖ω (alg.z (n+1))-ω (alg.z n)‖<ε:=by
+    rintro ε epos
+    rcases this ε epos with ⟨δ,dpos,ieq⟩
+    rcases (nhds_basis_abs_sub_lt (0:ℝ)).tendsto_right_iff.mp (Sufficient_Descent4 γ hγ ck dk lbdψ) δ dpos with lte
+    simp at lte
+    rcases lte with ⟨a,ie⟩
+    use a;rintro n alen
+    apply ieq
+    apply subset_closure (mem_image_of_mem z (mem_univ (n+1)))
+    apply subset_closure (mem_image_of_mem z (mem_univ (n)))
+    apply ie n alen
+  rcases this (1/2) one_half_pos with ⟨N,key⟩
+  have :∃M,(∀n≥M,alg.z n ∈ U)∨(∀n≥M,alg.z n ∈ V):= by
+    let M:= max k0 N
+    use M
+    rcases hk0 M (Nat.le_max_left k0 N) with MU|MV
+    left
+    have (n:ℕ):alg.z (M+n)∈U:= by
+      induction' n with n ih
+      · exact MU
+      rcases hk0 (M+n+1) ((Nat.le_max_left k0 N).trans (Nat.le_add_right M (n + 1))) with nU|nV
+      exact nU
+      rw [mem_setOf] at ih nV
+      linarith [(abs_lt.mp (key (M+n) ((Nat.le_max_right k0 N).trans (Nat.le_add_right M (n))))).2,ih,nV]
+    rintro n Mlen
+    rw [←Nat.add_sub_of_le Mlen];apply this (n - M)
+    right
+    have (n:ℕ):alg.z (M+n)∈V:= by
+      induction' n with n ih
+      · exact MV
+      rcases hk0 (M+n+1) ((Nat.le_max_left k0 N).trans (Nat.le_add_right M (n + 1))) with nU|nV
+      rw [mem_setOf] at ih nU
+      linarith [(abs_lt.mp (key (M+n) ((Nat.le_max_right k0 N).trans (Nat.le_add_right M (n))))).1,ih,nU]
+      exact nV
+    rintro n Mlen
+    rw [←Nat.add_sub_of_le Mlen];apply this (n - M)
+  --show the contradiction
+  rcases this with ⟨M,h1|h2⟩
+  · rcases noneptB with ⟨z_,inB⟩
+    have :z_∈limit_set alg.z:= mem_of_mem_inter_left inB
+    have : ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_) :=by
+      exact subseq_tendsto_of_neBot this
+    rcases this with ⟨φ,monoφ,conv⟩
+    have :ω z_≤1/4:= by
+      apply le_of_tendsto (continuous_iff_seqContinuous.mp (contω) conv)
+      simp
+      use M
+      rintro b Mleb
+      have g:= h1 (φ b) (Mleb.trans (StrictMono_nat φ monoφ b))
+      rw [mem_setOf] at g
+      simp at g
+      apply le_of_lt g
+    linarith [this,B1 z_ inB]
+  · rcases noneptA with ⟨z_,inA⟩
+    have :z_∈limit_set alg.z:= mem_of_mem_inter_left inA
+    have : ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_) :=by
+      exact subseq_tendsto_of_neBot this
+    rcases this with ⟨φ,monoφ,conv⟩
+    have :ω z_≥3/4:= by
+      apply ge_of_tendsto (continuous_iff_seqContinuous.mp (contω) conv)
+      simp
+      use M
+      rintro b Mleb
+      have g:= h2 (φ b) (Mleb.trans (StrictMono_nat φ monoφ b))
+      rw [mem_setOf] at g
+      apply le_of_lt g
+    linarith [this,A0 z_ inA]
 
-lemma limitset_property_4 (bd : Bornology.IsBounded (alg.z '' univ)):
+
+lemma limitset_property_4 (bd : Bornology.IsBounded (alg.z '' univ)) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃ (c:ℝ) , ∀ x ∈ (limit_set alg.z) , alg.ψ x = c := by
-  --下面这个have主要是充分下降中的定理，其中告诉我们这么个定理
-  --alg.ψ必将收敛到一个（局部极小）值
-  have decent_ψ:∃ ψ_final, Tendsto (alg.ψ ∘ alg.z) Filter.atTop (nhds ψ_final) :=
-    by sorry
+  --alg.ψ converges to same ψ_final
+  have decent_ψ:∃ ψ_final, Tendsto (alg.ψ ∘ alg.z) Filter.atTop (nhds ψ_final) :=by
+    have monopsi:Antitone (alg.ψ ∘alg.z):= by
+      apply antitone_nat_of_succ_le
+      apply Sufficient_Descent2 γ hγ ck dk
+    rcases (tendsto_of_antitone monopsi) with h1|h2
+    have notbd:=unbounded_of_tendsto_atBot h1
+    have bdd:BddBelow (range (alg.ψ ∘ alg.z)):=by
+      apply BddBelow.mono _ lbdψ
+      simp
+      apply range_comp_subset_range
+    contradiction
+    exact h2
   rcases decent_ψ with ⟨ψ_final,hψ⟩
-  --我们证明这个收敛到的值正是我们要证的c
+  --show that ψ_final is what we need
   use ψ_final
   intro z_1 hz_1
-  --z_1是聚点，自然有下面这个结论
-  have z_1_cluster: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_1) :=
-    by sorry
-  --利用上面的limitset_property_1'的第二个结论，可知这个聚点必在crit中，即可完成证明
-  have :alg.ψ z_1= ψ_final:=
-    by sorry
+  have z_1_cluster: ∃ (φ : ℕ → ℕ), StrictMono φ ∧ Filter.Tendsto (alg.z ∘ φ) Filter.atTop (nhds z_1) :=by
+    exact subseq_tendsto_of_neBot hz_1
+  rcases z_1_cluster with ⟨φ,⟨monoφ,conv⟩⟩
+  have :alg.ψ z_1= ψ_final:=by
+    have tend1:Tendsto (alg.ψ∘alg.z ∘ φ) atTop (𝓝 ψ_final):=by
+      obtain monoφ' := StrictMono.tendsto_atTop monoφ
+      calc
+        _ ≤ map (fun n ↦ ((alg.ψ∘alg.z) n)) atTop := by
+          rw [← Filter.map_map]; apply map_mono monoφ'
+        _ ≤ (𝓝 ψ_final) := by
+          exact hψ
+    have tend2:Tendsto (alg.ψ∘alg.z ∘ φ) atTop (𝓝 (alg.ψ z_1)):=
+      psiconv γ hγ ck dk φ z_1 monoφ conv bd lbdψ
+    apply tendsto_nhds_unique tend2 tend1
   exact this
 
 
@@ -851,15 +1097,22 @@ lemma sq_le_mul_le_mean {a b c : ℝ} (h : a ^ 2 ≤ b * c) (hpos : 0 ≤ b + c)
 
 theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ):
     ∃ M : ℝ, ∀ n, ∑ k in Finset.range n, ‖alg.z (k + 1) - alg.z k‖ ≤ M := by
-  obtain h1 := (IsCompact.isSeqCompact bd.isCompact_closure).subseq_of_frequently_in
-    (sorryAx (∃ᶠ (n : ℕ) in atTop, BCD.z n ∈ closure (alg.z '' univ)) true)
-  rcases h1 with ⟨z_, z_in, α, ⟨monoa, conv⟩⟩
+  have :∃ z_∈ closure (alg.z '' univ), ∃ α:ℕ → ℕ,StrictMono α∧Tendsto (fun n ↦ alg.z (α n)) atTop (𝓝 z_):= by
+    have hcs:IsSeqCompact (closure (alg.z '' univ)) := by
+      apply IsCompact.isSeqCompact
+      exact bd.isCompact_closure
+    have even: ∃ᶠ n in atTop, alg.z n ∈ closure (alg.z '' univ) := sorryAx (∃ᶠ (n : ℕ) in atTop,
+      BCD.z n ∈ closure (alg.z '' univ)) true
+    exact hcs.subseq_of_frequently_in even
+  rcases this with ⟨z_,z_in,α,⟨monoa,conv⟩⟩
   rcases Sufficient_Descent1 γ hγ ck dk with ⟨ρ1,ρ1pos,suff_des⟩
   have z_in : z_ ∈ limit_set alg.z:= by
     simp [limit_set, MapClusterPt]
     apply ClusterPt.mono (ClusterPt.of_le_nhds conv)
     calc
-      _ = map (fun n ↦ alg.z n) (map α atTop) := by rw [map_map]
+      _ = map (fun n ↦ alg.z n) (map α atTop) := by
+        rw [map_map]
+        rfl
       _ ≤ map (fun  n↦ alg.z n) atTop := map_mono (StrictMono.tendsto_atTop monoa)
   have final m : ∃ n : ℕ, m ≤ α n := by
     induction' m with m ih
@@ -871,9 +1124,8 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       apply monoa
       norm_num
     linarith
-  have psiconv : Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
-    sorry
-
+  have psiconv:Tendsto (fun n ↦ alg.ψ (alg.z (α n))) atTop (𝓝 (alg.ψ z_)):=by
+    apply psiconv γ hγ ck dk α z_ monoa conv bd lbdψ
   have monopsi (m n : ℕ) : alg.ψ (alg.z (m + n)) ≤ alg.ψ (alg.z m):= by
     induction' n with n ih
     · simp
@@ -908,7 +1160,7 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
         _ < alg.ψ z_ + η := (ieq l1 left_mem_Ici).2
     have L2 : ∀ ε > 0, ∃ l2, ∀k > l2, (EMetric.infEdist (alg.z k) (limit_set alg.z)).toReal< ε := by
       rintro ε epos
-      rcases limitset_property_2 bd with tendt
+      rcases limitset_property_2 bd lbdψ with tendt
       rcases (atTop_basis.tendsto_iff (nhds_basis_abs_sub_lt (0:ℝ))).mp tendt ε epos with ⟨l2,_,ieq⟩
       simp at ieq; exact ⟨l2, fun k kgt ↦ (ieq k (le_of_lt kgt))⟩
     have active (n:ℕ) (ngt0 : n>0) : alg.z n ∈ active_domain alg.ψ := by
@@ -924,17 +1176,17 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       rintro z0 z0in; apply hψ
       simp [active_domain]
       intro empt
-      have : (0 : WithLp 2 (E × F)) ∈ subdifferential alg.ψ z0 := (limitset_property_1 bd).2 z0in
+      have : (0 : WithLp 2 (E × F)) ∈ subdifferential alg.ψ z0 := (limitset_property_1 γ hγ ck dk bd lbdψ).2 z0in
       rw [empt] at this; exact this
     have cons : is_constant_on alg.ψ (limit_set alg.z):= by
       simp [is_constant_on]
       intro x xin y yin
-      rcases limitset_property_4 bd with ⟨C,heq⟩
+      rcases limitset_property_4 γ hγ  ck dk bd lbdψ with ⟨C,heq⟩
       rw [heq x xin,heq y yin]
     have kl: ∃ ε ∈ Set.Ioi (0 : ℝ), ∃ η ∈  Set.Ioi (0 : ℝ), ∃ φ ∈ special_concave η, ∃ LL, ∀ n > LL,
         (alg.ψ z_ < alg.ψ (alg.z n) ∧ alg.ψ (alg.z n) < alg.ψ z_ + η) ∧ deriv φ (alg.ψ (alg.z n)
         - alg.ψ z_) * (EMetric.infEdist 0 (subdifferential alg.ψ (alg.z n))).toReal ≥ 1 := by
-      rcases uniformly_KL_property (limitset_property_3 bd).1 wklpt cons
+      rcases uniformly_KL_property (limitset_property_3 γ hγ ck dk bd lbdψ).1 wklpt cons
         with ⟨ε, eppos, η, etpos, φ, hφ, pro⟩
       rcases L1 η etpos with ⟨l1,lem1⟩
       rcases L2 ε eppos with ⟨l2,lem2⟩
@@ -1093,12 +1345,12 @@ theorem Limited_length (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_func
       rw [eq0, epty]
       exact Preorder.le_refl 0
 
-theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) :
+theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : KL_function alg.ψ) (lbdψ : BddBelow (alg.ψ '' univ)):
     ∃z_ : (WithLp 2 (E × F)), z_ ∈ (critial_point alg.ψ) ∧ Tendsto alg.z atTop (𝓝 z_):= by
   have : ∃ z_, Tendsto alg.z atTop (𝓝 z_) := by
     apply cauchySeq_tendsto_of_complete
     apply cauchySeq_of_summable_dist
-    rcases Limited_length γ hγ ck dk bd hψ with ⟨M,sumle⟩
+    rcases Limited_length γ hγ ck dk bd hψ lbdψ with ⟨M,sumle⟩
     apply @summable_of_sum_range_le _ M _ _
     intro n; simp; exact dist_nonneg
     intro n
@@ -1111,7 +1363,6 @@ theorem Convergence_to_critpt (bd : Bornology.IsBounded (alg.z '' univ)) (hψ : 
   have z_in : z_∈limit_set alg.z := by
     simp [limit_set,MapClusterPt]
     exact ClusterPt.of_le_nhds hzz
-  apply (limitset_property_1 bd).2 z_in
+  apply (limitset_property_1 γ hγ ck dk bd lbdψ).2 z_in
 
 end Limited_length
-end
